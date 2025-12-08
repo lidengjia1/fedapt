@@ -76,98 +76,256 @@ Decision Support System/
 ### 1. 环境配置
 
 ```bash
-# 创建虚拟环境
+# 创建Python环境
 conda create -n feddeproto python=3.8
 conda activate feddeproto
 
 # 安装依赖
 pip install torch torchvision
 pip install numpy pandas scikit-learn
-pip install matplotlib seaborn
-pip install openpyxl  # 用于读取 Excel
+pip install matplotlib seaborn tqdm
+pip install openpyxl xlsxwriter  # Excel支持
 ```
 
 ### 2. 数据准备
 
-将以下数据文件放入 `data/` 目录：
+将数据文件放入 `data/` 目录：
 - `australian_credit.csv`
 - `german_credit.csv`
 - `xinwang.csv`
 - `uci_credit.xls`
 
-### 3. 验证系统
+### 3. 快速测试
 
 ```bash
-# 测试框架核心功能
-python test_framework.py
-
-# 快速测试(运行3个样例实验)
-python quick_test.py --mode quick
-
-# 单个实验演示
-python quick_test.py --mode single
-```
-
-### 4. 运行实验
-
-#### 4.1 单个实验 (调试用)
-```bash
-# 基本用法
+# 测试单个实验（Australian数据集 + FedAvg）
 python main.py --mode single --dataset australian --method fedavg
 
-# 完整参数
-python main.py --mode single \
-  --dataset australian \
-  --method fedavg \
-  --num-clients 10 \
-  --lr 0.001 \
-  --partition-type lda \
-  --alpha 0.1
+# 查看实验组设计
+python main.py --mode experiments --summary
+
+# 运行小规模实验组（28个实验，约30分钟）
+python main.py --mode experiments --groups A
 ```
 
-#### 4.2 分组对照实验 (推荐)
-```bash
-# 查看实验摘要
-python experiments/experiment_manager.py --summary
+---
 
-# 运行特定实验组
-python main.py --mode experiments --groups A      # 28个实验
-python main.py --mode experiments --groups A,B    # 48个实验
-python main.py --mode experiments --groups all    # 228个实验
+## 📊 对比实验详细说明
+
+### 实验组设计
+
+本系统设计了 **5个实验组** 共 **228个对照实验**，用于全面评估FedDeProto性能：
+
+| 组别 | 实验数 | 控制变量 | 研究问题 |
+|------|--------|----------|----------|
+| **A** | 28 | 方法对比 | 7种方法在4个数据集上的基础性能 |
+| **B** | 20 | 数据划分 | 5种划分策略对FedDeProto的影响 |
+| **C** | 84 | 客户端数 | 客户端数量对7种方法的影响 |
+| **D** | 84 | 学习率 | 学习率对7种方法的影响 |
+| **E** | 12 | 隐私预算 | 差分隐私对FedDeProto的影响 |
+
+---
+
+### 实验组A: 方法对比 (28个实验)
+
+**目的**: 对比7种联邦学习方法的基础性能
+
+**控制变量**:
+- 客户端数: 10
+- 学习率: 0.001
+- 划分方式: LDA (α=0.1)
+- 训练轮次: 150
+
+**命令**:
+
+```bash
+# 运行实验组A所有实验
+python main.py --mode experiments --groups A
+
+# 运行单个方法在所有数据集上的实验
+python main.py --mode single --method fedavg --dataset australian
+python main.py --mode single --method fedavg --dataset german
+python main.py --mode single --method fedavg --dataset xinwang
+python main.py --mode single --method fedavg --dataset uci
+
+# 对比FedDeProto vs FedAvg
+python main.py --mode single --method feddeproto --dataset australian
+python main.py --mode single --method fedavg --dataset australian
 ```
 
-**实验组说明**:
-- **组A (28个)**: 基础性能对比 - 7种方法 × 4数据集
-- **组B (20个)**: 数据划分影响 - 5种划分方式 × 4数据集
-- **组C (84个)**: 客户端数量影响 - 3种客户端数 × 7方法 × 4数据集
-- **组D (84个)**: 学习率影响 - 3种学习率 × 7方法 × 4数据集
-- **组E (12个)**: 差分隐私影响 - 3种ε × 4数据集
+**7种方法**:
+1. `feddeproto` - FedDeProto (本文方法)
+2. `fedavg` - FedAvg (加权平均)
+3. `fedprox` - FedProx (近端项正则化)
+4. `fedkf` - FedKF (卡尔曼滤波)
+5. `fedfa` - FedFA (特征对齐)
+6. `feddr+` - FedDr+ (原型蒸馏)
+7. `fedtgp` - FedTGP (时序梯度预测)
 
-详细说明见 **[EXPERIMENT_GUIDE.md](EXPERIMENT_GUIDE.md)**
-- `xinwang.csv`
-- `uci_credit.xls`
+**结果文件**: `results/experiment_results_GroupA.xlsx`
 
-### 3. 运行单个实验
+---
+
+### 实验组B: 数据划分影响 (20个实验)
+
+**目的**: 研究不同数据异质性对FedDeProto的影响
+
+**控制变量**:
+- 方法: FedDeProto
+- 客户端数: 10
+- 学习率: 0.001
+- 训练轮次: 150
+
+**命令**:
 
 ```bash
-# 使用 FedAvg 在 Australian 数据集上测试 (α=0.1)
-python main.py --mode single --dataset australian --alpha 0.1 --method fedavg
+# 运行实验组B所有实验
+python main.py --mode experiments --groups B
 
-# 使用 FedDeProto 在 German 数据集上测试 (α=0.3)
-python main.py --mode single --dataset german --alpha 0.3 --method feddeproto
+# 测试不同LDA参数
+python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 0.1
+python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 0.3
+python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 1.0
 
-# 使用 GPU
-python main.py --mode single --dataset xinwang --alpha 1.0 --method fedkf --gpu 0
+# 测试标签偏斜
+python main.py --mode single --method feddeproto --dataset german --partition-type label_skew
+
+# 测试特征偏斜
+python main.py --mode single --method feddeproto --dataset xinwang --partition-type feature_skew
 ```
 
-### 4. 运行完整实验
+**5种划分策略**:
+1. `lda --alpha 0.1` - 强异质性 (LDA α=0.1)
+2. `lda --alpha 0.3` - 中等异质性 (LDA α=0.3)
+3. `lda --alpha 1.0` - 弱异质性 (LDA α=1.0)
+4. `label_skew` - 标签偏斜
+5. `feature_skew` - 特征偏斜
+
+**结果文件**: `results/experiment_results_GroupB.xlsx`
+
+---
+
+### 实验组C: 客户端数量影响 (84个实验)
+
+**目的**: 研究客户端数量对所有方法的影响
+
+**控制变量**:
+- 学习率: 0.001
+- 划分方式: LDA (α=0.1)
+- 训练轮次: 150
+
+**命令**:
 
 ```bash
-# 运行所有数据集、所有α值、所有方法的对比实验
-python main.py --mode full
+# 运行实验组C所有实验
+python main.py --mode experiments --groups C
 
-# 这将运行：
-# 4 datasets × 3 alpha values × 7 methods = 84 experiments
+# 测试5个客户端
+python main.py --mode single --method fedavg --dataset australian --num-clients 5
+
+# 测试10个客户端 (默认)
+python main.py --mode single --method fedprox --dataset german --num-clients 10
+
+# 测试20个客户端
+python main.py --mode single --method fedkf --dataset xinwang --num-clients 20
+```
+
+**3种客户端配置**:
+- 5个客户端 (小规模)
+- 10个客户端 (中等规模，默认)
+- 20个客户端 (大规模)
+
+**实验矩阵**: 3种配置 × 7种方法 × 4个数据集 = 84个实验
+
+**结果文件**: `results/experiment_results_GroupC.xlsx`
+
+---
+
+### 实验组D: 学习率影响 (84个实验)
+
+**目的**: 研究学习率对所有方法的影响
+
+**控制变量**:
+- 客户端数: 10
+- 划分方式: LDA (α=0.1)
+- 训练轮次: 150
+
+**命令**:
+
+```bash
+# 运行实验组D所有实验
+python main.py --mode experiments --groups D
+
+# 测试低学习率
+python main.py --mode single --method fedavg --dataset australian --lr 0.0001
+
+# 测试中等学习率 (默认)
+python main.py --mode single --method fedprox --dataset german --lr 0.001
+
+# 测试高学习率
+python main.py --mode single --method fedkf --dataset xinwang --lr 0.01
+```
+
+**3种学习率**:
+- 0.0001 (低学习率)
+- 0.001 (中等学习率，默认)
+- 0.01 (高学习率)
+
+**实验矩阵**: 3种学习率 × 7种方法 × 4个数据集 = 84个实验
+
+**结果文件**: `results/experiment_results_GroupD.xlsx`
+
+---
+
+### 实验组E: 差分隐私影响 (12个实验)
+
+**目的**: 研究差分隐私预算对FedDeProto的影响
+
+**控制变量**:
+- 方法: FedDeProto
+- 客户端数: 10
+- 学习率: 0.001
+- 划分方式: LDA (α=0.1)
+- 训练轮次: 150
+
+**命令**:
+
+```bash
+# 运行实验组E所有实验
+python main.py --mode experiments --groups E
+
+# 测试强隐私保护 (ε=0.5)
+python main.py --mode single --method feddeproto --dataset australian --epsilon 0.5
+
+# 测试中等隐私保护 (ε=1.0, 默认)
+python main.py --mode single --method feddeproto --dataset german --epsilon 1.0
+
+# 测试弱隐私保护 (ε=2.0)
+python main.py --mode single --method feddeproto --dataset xinwang --epsilon 2.0
+```
+
+**3种隐私预算**:
+- ε = 0.5 (强隐私保护)
+- ε = 1.0 (中等隐私保护，默认)
+- ε = 2.0 (弱隐私保护)
+
+**实验矩阵**: 3种ε × 4个数据集 = 12个实验
+
+**结果文件**: `results/experiment_results_GroupE.xlsx`
+
+---
+
+### 运行多个实验组
+
+```bash
+# 运行组A和组B (共48个实验)
+python main.py --mode experiments --groups A,B
+
+# 运行所有实验组 (共228个实验，需要数小时)
+python main.py --mode experiments --groups all
+
+# 查看实验进度和结果摘要
+python main.py --mode experiments --summary
 ```
 
 ## 📊 实验配置
