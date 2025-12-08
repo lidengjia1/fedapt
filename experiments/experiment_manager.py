@@ -201,12 +201,13 @@ class ExperimentManager:
                 experiments.append(exp)
         return experiments
     
-    def run_experiment_groups(self, groups='all'):
+    def run_experiment_groups(self, groups='all', skip_confirm=False):
         """
         运行实验组
         
         Args:
             groups: 要运行的实验组 ('all', 'A', 'B,C', etc.)
+            skip_confirm: 是否跳过确认提示，直接运行
         """
         # 解析要运行的实验组
         if groups == 'all':
@@ -227,10 +228,13 @@ class ExperimentManager:
         print("="*70)
         
         # 确认是否继续
-        response = input(f"\n是否开始运行 {total_count} 个实验? (yes/no): ")
-        if response.lower() not in ['yes', 'y']:
-            print("已取消")
-            return
+        if not skip_confirm:
+            response = input(f"\n是否开始运行 {total_count} 个实验? (yes/no): ")
+            if response.lower() not in ['yes', 'y']:
+                print("已取消")
+                return
+        else:
+            print(f"\n自动开始运行 {total_count} 个实验...")
         
         # 创建进度追踪器
         tracker = ExperimentProgressTracker(total_count)

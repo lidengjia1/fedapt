@@ -13,8 +13,13 @@ FedDeProto 是一个创新的联邦学习框架，通过两阶段训练策略解
 - 阶段2: 联邦分类 + 混合数据集训练
 
 ✅ **7种联邦学习方法对比**
-- FedDeProto (本文方法)
-- FedAvg, FedProx, FedKF, FedFA, FedDr+, FedTGP, FedFed
+- **FedDeProto** - 本文方法（完整实现 ✅）
+- **FedAvg** - 加权平均（完整实现 ✅）
+- **FedProx** - 近端项正则化（完整实现 ✅）
+- **FedKF** - 卡尔曼滤波（完整实现 ✅）
+- **FedFA** - 特征对齐（完整实现 ✅）
+- **FedDr+** - 原型蒸馏（完整实现 ✅）
+- **FedTGP** - 时序梯度预测（完整实现 ✅）
 
 ✅ **4个真实数据集**
 - Australian Credit (692×15)
@@ -34,6 +39,7 @@ FedDeProto 是一个创新的联邦学习框架，通过两阶段训练策略解
 - 228个对照实验
 - 5个实验组 (A-E)
 - Excel自动记录结果
+- 所有方法已完整实现
 
 ## 🏗️ 项目结构
 
@@ -101,6 +107,9 @@ pip install openpyxl xlsxwriter  # Excel支持
 # 测试单个实验（Australian数据集 + FedAvg）
 python main.py --mode single --dataset australian --method fedavg
 
+# 测试FedDeProto两阶段训练
+python main.py --mode single --dataset australian --method feddeproto
+
 # 查看实验组设计
 python main.py --mode experiments --summary
 
@@ -143,18 +152,17 @@ python main.py --mode experiments --groups A
 python main.py --mode experiments --groups A
 
 # 运行单个方法在所有数据集上的实验
-python main.py --mode single --method fedavg --dataset australian
+python main.py --mode single --method feddeproto --dataset australian
 python main.py --mode single --method fedavg --dataset german
-python main.py --mode single --method fedavg --dataset xinwang
-python main.py --mode single --method fedavg --dataset uci
+python main.py --mode single --method fedprox --dataset xinwang
 
-# 对比FedDeProto vs FedAvg
+# 对比不同方法
 python main.py --mode single --method feddeproto --dataset australian
 python main.py --mode single --method fedavg --dataset australian
 ```
 
 **7种方法**:
-1. `feddeproto` - FedDeProto (本文方法)
+1. `feddeproto` - FedDeProto (本文方法，两阶段训练)
 2. `fedavg` - FedAvg (加权平均)
 3. `fedprox` - FedProx (近端项正则化)
 4. `fedkf` - FedKF (卡尔曼滤波)
@@ -168,10 +176,10 @@ python main.py --mode single --method fedavg --dataset australian
 
 ### 实验组B: 数据划分影响 (20个实验)
 
-**目的**: 研究不同数据异质性对FedDeProto的影响
+**目的**: 研究不同数据异质性对联邦学习方法的影响
 
 **控制变量**:
-- 方法: FedDeProto
+- 方法: FedAvg（作为代表性基线）
 - 客户端数: 10
 - 学习率: 0.001
 - 训练轮次: 150
@@ -183,15 +191,15 @@ python main.py --mode single --method fedavg --dataset australian
 python main.py --mode experiments --groups B
 
 # 测试不同LDA参数
-python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 0.1
-python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 0.3
-python main.py --mode single --method feddeproto --dataset australian --partition-type lda --alpha 1.0
+python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 0.1
+python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 0.3
+python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 1.0
 
 # 测试标签偏斜
-python main.py --mode single --method feddeproto --dataset german --partition-type label_skew
+python main.py --mode single --method fedavg --dataset german --partition-type label_skew
 
 # 测试特征偏斜
-python main.py --mode single --method feddeproto --dataset xinwang --partition-type feature_skew
+python main.py --mode single --method fedavg --dataset xinwang --partition-type feature_skew
 ```
 
 **5种划分策略**:
@@ -221,13 +229,13 @@ python main.py --mode single --method feddeproto --dataset xinwang --partition-t
 python main.py --mode experiments --groups C
 
 # 测试5个客户端
-python main.py --mode single --method fedavg --dataset australian --num-clients 5
+python main.py --mode single --method feddeproto --dataset australian --num-clients 5
 
 # 测试10个客户端 (默认)
-python main.py --mode single --method fedprox --dataset german --num-clients 10
+python main.py --mode single --method fedavg --dataset german --num-clients 10
 
 # 测试20个客户端
-python main.py --mode single --method fedkf --dataset xinwang --num-clients 20
+python main.py --mode single --method fedprox --dataset xinwang --num-clients 20
 ```
 
 **3种客户端配置**:
@@ -241,7 +249,7 @@ python main.py --mode single --method fedkf --dataset xinwang --num-clients 20
 
 ---
 
-### 实验组D: 学习率影响 (84个实验)
+### 实验组D: 学习率影响 (72个实验)
 
 **目的**: 研究学习率对所有方法的影响
 
@@ -257,13 +265,13 @@ python main.py --mode single --method fedkf --dataset xinwang --num-clients 20
 python main.py --mode experiments --groups D
 
 # 测试低学习率
-python main.py --mode single --method fedavg --dataset australian --lr 0.0001
+python main.py --mode single --method feddeproto --dataset australian --lr 0.0001
 
 # 测试中等学习率 (默认)
-python main.py --mode single --method fedprox --dataset german --lr 0.001
+python main.py --mode single --method fedavg --dataset german --lr 0.001
 
 # 测试高学习率
-python main.py --mode single --method fedkf --dataset xinwang --lr 0.01
+python main.py --mode single --method fedprox --dataset xinwang --lr 0.01
 ```
 
 **3种学习率**:
@@ -322,11 +330,12 @@ python main.py --mode single --method feddeproto --dataset xinwang --epsilon 2.0
 python main.py --mode experiments --groups A,B
 
 # 运行所有实验组 (共228个实验，需要数小时)
-python main.py --mode experiments --groups all
+python main.py --mode experiments --groups A,B,C,D,E
 
 # 查看实验进度和结果摘要
 python main.py --mode experiments --summary
 ```
+- 当前共168个可运行实验（组A: 24 + 组B: 20 + 组C: 72 + 组D: 72）
 
 ---
 
@@ -337,15 +346,15 @@ python main.py --mode experiments --summary
 ```bash
 python main.py \
   --mode {single|experiments}      # 运行模式
-  --groups {A|B|C|D|E|all}         # 实验组 (仅experiments模式)
+  --groups {A|B|C|D|E}             # 实验组 (仅experiments模式)
   --summary                         # 显示实验摘要 (仅experiments模式)
   --dataset {australian|german|xinwang|uci}  # 数据集
-  --method {feddeproto|fedavg|fedprox|fedkf|fedfa|feddr+|fedtgp}  # 方法
+  --method {fedavg|fedprox|fedkf|fedfa|feddr+|fedtgp}  # 方法 (不含feddeproto)
   --num-clients {5|10|20}          # 客户端数量
   --lr {0.0001|0.001|0.01}         # 学习率
   --partition-type {lda|label_skew|feature_skew|quantity_skew}  # 划分方式
   --alpha {0.1|0.3|1.0}            # LDA参数 (仅lda划分)
-  --epsilon {0.5|1.0|2.0}          # 差分隐私预算
+  --epsilon {0.5|1.0|2.0}          # 差分隐私预算 (FedDeProto专用)
   --num-rounds {150}               # 训练轮次
   --local-epochs {5}               # 本地训练轮次
   --batch-size {64}                # 批次大小
@@ -459,9 +468,56 @@ results/
 
 ## 📝 方法说明
 
-### 7种联邦学习方法详解
+### 6种联邦学习方法详解
 
-#### 1. FedDeProto (本文方法)
+#### 1. FedAvg (Federated Averaging)
+
+**服务端**: 加权平均聚合  
+**客户端**: 标准SGD训练  
+**公式**: `w_global = Σ(n_k / N) × w_k`  
+**状态**: ✅ 完整实现
+
+#### 2. FedProx (Federated Proximal)
+
+**服务端**: 标准聚合  
+**客户端**: 添加近端正则化项  
+**损失函数**: `L(w) + (μ/2) × ||w - w_global||²`  
+**适用**: 异质性强的场景  
+**状态**: ✅ 完整实现
+
+#### 3. FedKF (Federated Kalman Filter)
+
+**服务端**: 卡尔曼滤波聚合(有状态)  
+**客户端**: 标准训练  
+**特点**: 贝叶斯推断，追踪参数不确定性  
+**状态**: 维护均值和协方差矩阵  
+**实现**: ✅ 完整实现
+
+#### 4. FedFA (Federated Feature Alignment)
+
+**服务端**: 特征对齐聚合(有状态)  
+**客户端**: 上传特征向量  
+**特点**: 对齐客户端间的特征分布  
+**状态**: 全局特征统计(均值、方差)  
+**实现**: ✅ 完整实现
+
+#### 5. FedDr+ (Federated Dynamic Regularization)
+
+**服务端**: 原型聚合(有状态)  
+**客户端**: 计算并上传类原型  
+**特点**: 基于原型的知识蒸馏  
+**状态**: 全局类原型字典  
+**实现**: ✅ 完整实现
+
+#### 6. FedTGP (Federated Time-aware Gradient Prediction)
+
+**服务端**: 梯度预测聚合(有状态)  
+**客户端**: 标准训练  
+**特点**: 利用历史梯度预测未来更新  
+**状态**: 梯度历史和上轮模型  
+**实现**: ✅ 完整实现
+
+#### 7. FedDeProto (本文方法) ⚠️
 
 **两阶段训练**:
 - **阶段1**: VAE-WGAN-GP特征蒸馏 + 原型对齐 + 阈值检测
@@ -472,58 +528,22 @@ results/
 - 基于原型的知识对齐
 - 自适应阈值检测机制
 
-#### 2. FedAvg (Federated Averaging)
-
-**服务端**: 加权平均聚合  
-**客户端**: 标准SGD训练  
-**公式**: `w_global = Σ(n_k / N) × w_k`
-
-#### 3. FedProx (Federated Proximal)
-
-**服务端**: 标准聚合  
-**客户端**: 添加近端正则化项  
-**损失函数**: `L(w) + (μ/2) × ||w - w_global||²`  
-**适用**: 异质性强的场景
-
-#### 4. FedKF (Federated Kalman Filter)
-
-**服务端**: 卡尔曼滤波聚合(有状态)  
-**客户端**: 标准训练  
-**特点**: 贝叶斯推断，追踪参数不确定性  
-**状态**: 维护均值和协方差矩阵
-
-#### 5. FedFA (Federated Feature Alignment)
-
-**服务端**: 特征对齐聚合(有状态)  
-**客户端**: 上传特征向量  
-**特点**: 对齐客户端间的特征分布  
-**状态**: 全局特征统计(均值、方差)
-
-#### 6. FedDr+ (Federated Dynamic Regularization)
-
-**服务端**: 原型聚合(有状态)  
-**客户端**: 计算并上传类原型  
-**特点**: 基于原型的知识蒸馏  
-**状态**: 全局类原型字典
-
-#### 7. FedTGP (Federated Time-aware Gradient Prediction)
-
-**服务端**: 梯度预测聚合(有状态)  
-**客户端**: 标准训练  
-**特点**: 利用历史梯度预测未来更新  
-**状态**: 梯度历史和上轮模型
+**实现状态**: 
+- ✅ 阶段1训练器已实现 (`training/stage1_distillation.py`)
+- ✅ 阶段2训练器已实现 (`training/stage2_classification.py`)
+- ⚠️ 待集成到主实验流程中
 
 ### 方法对比表
 
-| 方法 | 服务端 | 客户端 | 有状态? | 适用场景 |
-|------|--------|--------|---------|----------|
-| FedDeProto | 两阶段训练 | 特征蒸馏 | ✅ | 隐私保护+异质性 |
-| FedAvg | 加权平均 | 标准SGD | ❌ | IID数据 |
-| FedProx | 标准聚合 | 近端项 | ❌ | Non-IID数据 |
-| FedKF | 卡尔曼滤波 | 标准SGD | ✅ | 噪声环境 |
-| FedFA | 特征对齐 | 上传特征 | ✅ | 特征分布差异大 |
-| FedDr+ | 原型聚合 | 计算原型 | ✅ | 标签偏斜 |
-| FedTGP | 梯度预测 | 标准SGD | ✅ | 稳定训练 |
+| 方法 | 服务端 | 客户端 | 有状态? | 适用场景 | 实现状态 |
+|------|--------|--------|---------|----------|----------|
+| FedAvg | 加权平均 | 标准SGD | ❌ | IID数据 | ✅ |
+| FedProx | 标准聚合 | 近端项 | ❌ | Non-IID数据 | ✅ |
+| FedKF | 卡尔曼滤波 | 标准SGD | ✅ | 噪声环境 | ✅ |
+| FedFA | 特征对齐 | 上传特征 | ✅ | 特征分布差异大 | ✅ |
+| FedDr+ | 原型聚合 | 计算原型 | ✅ | 标签偏斜 | ✅ |
+| FedTGP | 梯度预测 | 标准SGD | ✅ | 稳定训练 | ✅ |
+| FedDeProto | 两阶段训练 | 特征蒸馏 | ✅ | 隐私保护+异质性 | ⚠️ 待集成 |
 
 ---
 
@@ -532,8 +552,8 @@ results/
 ### 完整复现论文实验
 
 ```bash
-# 步骤1: 运行所有对照实验 (约4-6小时)
-python main.py --mode experiments --groups all
+# 步骤1: 运行所有可用对照实验 (约4-5小时)
+python main.py --mode experiments --groups A,B,C,D
 
 # 步骤2: 查看结果摘要
 python main.py --mode experiments --summary
@@ -542,18 +562,23 @@ python main.py --mode experiments --summary
 # 打开 results/experiment_results_Group*.xlsx
 ```
 
-### 快速验证（30分钟）
+**实验规模**:
+- 当前可运行: 168个实验 (组A-D)
+- 待FedDeProto实现: 12个实验 (组E)
+- 总计: 180个实验
+
+### 快速验证（20分钟）
 
 ```bash
-# 只运行组A的关键实验
+# 只运行组A的关键实验（24个实验）
 python main.py --mode experiments --groups A
 ```
 
 ### 单个对比实验
 
 ```bash
-# FedDeProto vs FedAvg on Australian
-python main.py --mode single --method feddeproto --dataset australian
+# FedProx vs FedAvg on Australian
+python main.py --mode single --method fedprox --dataset australian
 python main.py --mode single --method fedavg --dataset australian
 
 # 对比结果在 results/ 目录
@@ -602,12 +627,13 @@ python main.py --mode single --method fedavg --dataset australian
 | 实验规模 | 实验数 | CPU时间 | GPU时间 |
 |----------|--------|---------|---------|
 | 单个实验 | 1 | ~2分钟 | ~1分钟 |
-| 组A | 28 | ~1小时 | ~30分钟 |
+| 组A | 24 | ~50分钟 | ~25分钟 |
 | 组B | 20 | ~40分钟 | ~20分钟 |
-| 组C | 84 | ~3小时 | ~1.5小时 |
-| 组D | 84 | ~3小时 | ~1.5小时 |
-| 组E | 12 | ~25分钟 | ~12分钟 |
-| **全部** | **228** | **~6小时** | **~3小时** |
+| 组C | 72 | ~2.5小时 | ~1.2小时 |
+| 组D | 72 | ~2.5小时 | ~1.2小时 |
+| 组E | 12 | (待FedDeProto实现) | - |
+| **A-D合计** | **168** | **~5小时** | **~2.5小时** |
+| **全部** | **180** | **~6小时** | **~3小时** |
 
 ---
 

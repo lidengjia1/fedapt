@@ -88,8 +88,11 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     config.dataset_name = dataset_name
     config.alpha = alpha
     config.num_clients = num_clients
-    config.learning_rate = learning_rate
+    config.learning_rate = float(learning_rate)  # 确保是float类型
     config.partition_type = partition_type
+    
+    # 验证学习率
+    logger.info(f"配置学习率: {config.learning_rate} (类型: {type(config.learning_rate).__name__})")
     
     # 设置设备
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -155,6 +158,7 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     # 获取模型配置
     model_config = get_model_config(dataset_name)
     input_dim = X_train.shape[1]
+    config.input_dim = input_dim  # 添加到配置中，FedDeProto需要
     
     # 创建模型
     print(f"\nCreating model for {dataset_name}...")
@@ -169,20 +173,67 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     # 训练
     if method.lower() == 'feddeproto':
         logger.info("\n--- Running FedDeProto (Two-Stage Training) ---")
-        logger.info("⚠️  FedDeProto需要完整实现，暂时跳过")
-        # TODO: 完整实现FedDeProto两阶段训练
-        # 暂时使用FedAvg替代
-        logger.info("使用FedAvg作为替代...")
-        trainer = BaselineTrainer(
-            model=model,
-            client_data_loaders=client_loaders,
-            test_loader=test_loader,
+        
+        from training.stage1_distillation import Stage1Distillation
+        from training.stage2_classification import Stage2Classification
+        
+        # 阶段1: 特征蒸馏
+        logger.info("Stage 1: Federated Feature Distillation")
+        
+        # 准备客户端数据字典格式
+        clients_data = {}
+        for client_id, loader in enumerate(client_loaders):
+            X_list, y_list = [], []
+            for batch_X, batch_y in loader:
+                X_list.append(batch_X)
+                y_list.append(batch_y)
+            clients_data[client_id] = {
+                'X': torch.cat(X_list, dim=0),
+                'y': torch.cat(y_list, dim=0)
+            }
+        
+        # 准备测试数据
+        X_test_list, y_test_list = [], []
+        for batch_X, batch_y in test_loader:
+            X_test_list.append(batch_X)
+            y_test_list.append(batch_y)
+        test_data = {
+            'X_test': torch.cat(X_test_list, dim=0),
+            'y_test': torch.cat(y_test_list, dim=0)
+        }
+        
+        # 运行阶段1
+        stage1_trainer = Stage1Distillation(config, clients_data, test_data)
+        stage1_history = stage1_trainer.train()
+        shared_features = stage1_trainer.shared_features
+        shared_labels = stage1_trainer.shared_labels
+        
+        logger.info(f"Stage 1 完成. 生成 {len(shared_features)} 个共享特征")
+        
+        # 阶段2: 联邦分类
+        logger.info("Stage 2: Federated Classification")
+        
+        stage2_trainer = Stage2Classification(
             config=config,
-            method='fedavg'
+            clients_data=clients_data,
+            shared_features=shared_features,
+            shared_labels=shared_labels,
+            test_data=test_data,
+            classifier_model=model
         )
-        num_rounds = config.T_d + config.T_r
-        history = trainer.train(num_rounds)
-        final_model = trainer.global_model
+        stage2_history = stage2_trainer.train()
+        final_model = stage2_trainer.global_classifier
+        
+        # 合并历史记录
+        history = {
+            'loss': stage1_history.get('loss', []) + stage2_history.get('loss', []),
+            'accuracy': stage1_history.get('accuracy', []) + stage2_history.get('accuracy', []),
+            'stage1_rounds': len(stage1_history.get('loss', [])),
+            'stage2_rounds': len(stage2_history.get('loss', [])),
+            'stopped_clients': stage1_history.get('stopped_clients', 0)
+        }
+        
+        logger.info("FedDeProto 两阶段训练完成")
         
     else:
         # 基准方法

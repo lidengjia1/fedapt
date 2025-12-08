@@ -63,6 +63,9 @@ def main():
     parser.add_argument('--no-clear', action='store_true',
                        help='Do not clear results directory before running')
     
+    parser.add_argument('--yes', '-y', action='store_true',
+                       help='Skip confirmation prompt and run experiments directly')
+    
     args = parser.parse_args()
     
     # 初始化实验环境（设置随机种子 + 清空results目录）
@@ -127,7 +130,7 @@ def main():
         
         from experiments.experiment_manager import ExperimentManager
         manager = ExperimentManager()
-        manager.run_experiment_groups(args.groups)
+        manager.run_experiment_groups(args.groups, skip_confirm=args.yes)
 
 
 if __name__ == '__main__':
