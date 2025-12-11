@@ -225,12 +225,17 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
         final_model = stage2_trainer.global_classifier
         
         # 合并历史记录
+        # 注意: FedDeProto的Stage1是VAE-WGAN-GP，loss可能为负数
+        # Stage2是分类loss，必为正数
         history = {
-            'train_loss': stage1_history.get('train_loss', []) + stage2_history.get('train_loss', []),
+            'train_loss': stage2_history.get('train_loss', []),  # 只使用Stage2的分类loss
             'test_accuracy': stage1_history.get('test_accuracy', []) + stage2_history.get('test_accuracy', []),
             'stage1_rounds': len(stage1_history.get('train_loss', [])),
             'stage2_rounds': len(stage2_history.get('train_loss', [])),
-            'stopped_clients': stage1_history.get('stopped_clients', 0)
+            'stopped_clients': stage1_history.get('stopped_clients', 0),
+            # 分开保存stage1和stage2的loss，供分析使用
+            'stage1_loss': stage1_history.get('train_loss', []),
+            'stage2_loss': stage2_history.get('train_loss', [])
         }
         
         logger.info("FedDeProto 两阶段训练完成")
@@ -258,6 +263,14 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     # 保存结果
     results_dir = create_results_directory('results')
     
+    # 计算final_loss（最终分类loss）
+    if method == 'feddeproto':
+        # FedDeProto: 只取Stage2的最后loss
+        final_loss = history['train_loss'][-1] if history.get('train_loss') else 0
+    else:
+        # 其他方法: 直接取最后loss
+        final_loss = history.get('train_loss', [0])[-1] if history.get('train_loss') else 0
+    
     result_data = {
         'dataset': dataset_name,
         'alpha': alpha,
@@ -272,8 +285,20 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
         'history': {
             'loss': [float(x) for x in history.get('train_loss', [])],
             'accuracy': [float(x) for x in history.get('test_accuracy', [])]
-        }
+        },
+        'final_loss': float(final_loss)  # 明确标识最终的分类loss
     }
+    
+    # 如果是FedDeProto，添加额外信息
+    if method == 'feddeproto':
+        result_data['feddeproto_info'] = {
+            'stage1_rounds': history.get('stage1_rounds', 0),
+            'stage2_rounds': history.get('stage2_rounds', 0),
+            'stopped_clients': history.get('stopped_clients', 0),
+            'stage1_loss': [float(x) for x in history.get('stage1_loss', [])],
+            'stage2_loss': [float(x) for x in history.get('stage2_loss', [])],
+            'note': 'stage1_loss来自VAE-WGAN-GP可能为负，stage2_loss为分类loss必为正'
+        }
     
     # 保存JSON
     result_file = results_dir / 'logs' / f'{dataset_name}_alpha{alpha}_{method}.json'
@@ -282,14 +307,31 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     print(f"\nResults saved to {result_file}")
     
     # 绘制训练曲线
+    # 注意：FedDeProto只绘制Stage2的分类loss和accuracy
     if 'test_accuracy' in history and 'train_loss' in history:
         plot_path = results_dir / 'plots' / f'{dataset_name}_alpha{alpha}_{method}_training.png'
-        plot_training_curves(
-            {
+        
+        # 准备绘图数据
+        if method == 'feddeproto':
+            # FedDeProto: 只绘制Stage2的数据
+            stage2_rounds = history.get('stage2_rounds', len(history['train_loss']))
+            plot_data = {
+                'loss': history['train_loss'],  # 已经只包含Stage2的loss
+                'accuracy': history['test_accuracy'][-stage2_rounds:] if len(history['test_accuracy']) > stage2_rounds else history['test_accuracy']
+            }
+            plot_title = f'{dataset_name.upper()} - {method.upper()} (Stage2 Classification)'
+        else:
+            # 其他方法：使用全部数据
+            plot_data = {
                 'loss': history['train_loss'],
                 'accuracy': history['test_accuracy']
-            },
-            save_path=plot_path
+            }
+            plot_title = f'{dataset_name.upper()} - {method.upper()}'
+        
+        plot_training_curves(
+            plot_data,
+            save_path=plot_path,
+            title=plot_title
         )
     
     return metrics, history

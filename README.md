@@ -29,17 +29,18 @@ FedDeProto 是一个创新的联邦学习框架，通过两阶段训练策略解
 
 ✅ **非IID数据分区**
 - Latent Dirichlet Allocation (LDA): α ∈ {0.1, 0.3, 1.0}
-- Label Skew, Feature Skew, Quantity Skew
+- Quantity Skew (数量偏斜)
 
 ✅ **差分隐私保护**
 - ε-差分隐私 (ε ∈ {0.5, 1.0, 2.0})
 - Laplace/Gaussian 噪声注入
 
 ✅ **完整实验系统**
-- 228个对照实验
-- 5个实验组 (A-E)
+- 236个对照实验
+- 4个实验组 (A-D)
 - Excel自动记录结果
 - 所有方法已完整实现
+- Focal Loss处理类别不平衡
 
 ## 🏗️ 项目结构
 
@@ -123,7 +124,7 @@ python main.py --mode experiments --groups A
 
 ### 实验组设计
 
-本系统设计了 **5个实验组** 共 **228个对照实验**，用于全面评估FedDeProto性能：
+本系统设计了 **4个实验组** 共 **236个对照实验**，用于全面评估FedDeProto性能：
 
 | 组别 | 实验数 | 控制变量 | 研究问题 |
 |------|--------|----------|----------|
@@ -140,7 +141,7 @@ python main.py --mode experiments --groups A
 
 **控制变量**:
 - 客户端数: 10
-- 学习率: 0.01
+- 学习率: 0.02
 - 划分方式: LDA (α=0.1)
 - 训练轮次: 250
 
@@ -173,15 +174,14 @@ python main.py --mode single --method fedavg --dataset australian
 
 ---
 
-### 实验组B: 数据划分影响 (20个实验)
+### 实验组B: 数据划分影响 (112个实验)
 
-**目的**: 研究不同数据异质性对联邦学习方法的影响
+**目的**: 研究不同数据异质性对所有联邦学习方法的影响
 
 **控制变量**:
-- 方法: FedAvg（作为代表性基线）
 - 客户端数: 10
-- 学习率: 0.001
-- 训练轮次: 150
+- 学习率: 0.02
+- 训练轮次: 250
 
 **命令**:
 
@@ -189,16 +189,13 @@ python main.py --mode single --method fedavg --dataset australian
 # 运行实验组B所有实验
 python main.py --mode experiments --groups B
 
-# 测试不同LDA参数
+# 测试不同LDA参数（所有方法）
 python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 0.1
-python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 0.3
-python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 1.0
+python main.py --mode single --method fedprox --dataset australian --partition-type lda --alpha 0.3
+python main.py --mode single --method fedkf --dataset australian --partition-type lda --alpha 1.0
 
-# 测试标签偏斜
-python main.py --mode single --method fedavg --dataset german --partition-type label_skew
-
-# 测试特征偏斜
-python main.py --mode single --method fedavg --dataset xinwang --partition-type feature_skew
+# 测试数量偏斜
+python main.py --mode single --method fedavg --dataset german --partition-type quantity_skew
 ```
 
 **4种划分策略**:
@@ -216,9 +213,9 @@ python main.py --mode single --method fedavg --dataset xinwang --partition-type 
 **目的**: 研究客户端数量对所有方法的影响
 
 **控制变量**:
-- 学习率: 0.001
+- 学习率: 0.02
 - 划分方式: LDA (α=0.1)
-- 训练轮次: 150
+- 训练轮次: 250
 
 **命令**:
 
@@ -229,11 +226,11 @@ python main.py --mode experiments --groups C
 # 测试5个客户端
 python main.py --mode single --method feddeproto --dataset australian --num-clients 5
 
-# 测试10个客户端 (默认)
-python main.py --mode single --method fedavg --dataset german --num-clients 10
+# 测试8个客户端
+python main.py --mode single --method fedavg --dataset german --num-clients 8
 
-# 测试20个客户端
-python main.py --mode single --method fedprox --dataset xinwang --num-clients 20
+# 测试10个客户端 (默认)
+python main.py --mode single --method fedprox --dataset xinwang --num-clients 10
 ```
 
 **3种客户端配置**:
@@ -247,58 +244,22 @@ python main.py --mode single --method fedprox --dataset xinwang --num-clients 20
 
 ---
 
-### 实验组D: 学习率影响 (72个实验)
-
-**目的**: 研究学习率对所有方法的影响
-
-**控制变量**:
-- 客户端数: 10
-- 划分方式: LDA (α=0.1)
-- 训练轮次: 150
-
-**命令**:
-
-```bash
-# 运行实验组D所有实验
-python main.py --mode experiments --groups D
-
-# 测试低学习率
-python main.py --mode single --method feddeproto --dataset australian --lr 0.0001
-
-# 测试中等学习率 (默认)
-python main.py --mode single --method fedavg --dataset german --lr 0.001
-
-# 测试高学习率
-python main.py --mode single --method fedprox --dataset xinwang --lr 0.01
-```
-
-**3种学习率**:
-- 0.0001 (低学习率)
-- 0.001 (中等学习率，默认)
-- 0.01 (高学习率)
-
-**实验矩阵**: 3种学习率 × 7种方法 × 4个数据集 = 84个实验
-
-**结果文件**: `results/experiment_results_GroupD.xlsx`
-
----
-
-### 实验组E: 差分隐私影响 (12个实验)
+### 实验组D: 差分隐私影响 (12个实验)
 
 **目的**: 研究差分隐私预算对FedDeProto的影响
 
 **控制变量**:
 - 方法: FedDeProto
 - 客户端数: 10
-- 学习率: 0.001
+- 学习率: 0.02
 - 划分方式: LDA (α=0.1)
-- 训练轮次: 150
+- 训练轮次: 250
 
 **命令**:
 
 ```bash
-# 运行实验组E所有实验
-python main.py --mode experiments --groups E
+# 运行实验组D所有实验
+python main.py --mode experiments --groups D
 
 # 测试强隐私保护 (ε=0.5)
 python main.py --mode single --method feddeproto --dataset australian --epsilon 0.5
@@ -317,23 +278,24 @@ python main.py --mode single --method feddeproto --dataset xinwang --epsilon 2.0
 
 **实验矩阵**: 3种ε × 4个数据集 = 12个实验
 
-**结果文件**: `results/experiment_results_GroupE.xlsx`
+**结果文件**: `results/experiment_results_GroupD.xlsx`
 
 ---
 
 ### 运行多个实验组
 
 ```bash
-# 运行组A和组B (共48个实验)
+# 运行组A和组B (共140个实验)
 python main.py --mode experiments --groups A,B
 
-# 运行所有实验组 (共228个实验，需要数小时)
+# 运行所有实验组 (共236个实验，需要数小时)
+python main.py --mode experiments --groups A,B,C,D
 python main.py --mode experiments --groups A,B,C,D,E
 
 # 查看实验进度和结果摘要
 python main.py --mode experiments --summary
 ```
-- 当前共168个可运行实验（组A: 24 + 组B: 20 + 组C: 72 + 组D: 72）
+- 当前共236个实验（组A: 28 + 组B: 112 + 组C: 84 + 组D: 12）
 
 ---
 
@@ -344,7 +306,7 @@ python main.py --mode experiments --summary
 ```bash
 python main.py \
   --mode {single|experiments}      # 运行模式
-  --groups {A|B|C|D|E}             # 实验组 (仅experiments模式)
+  --groups {A|B|C|D}               # 实验组 (仅experiments模式)
   --summary                         # 显示实验摘要 (仅experiments模式)
   --dataset {australian|german|xinwang|uci}  # 数据集
   --method {fedavg|fedprox|fedkf|fedfa|feddr+|fedtgp}  # 方法 (不含feddeproto)
@@ -370,11 +332,13 @@ class BaseConfig:
     # 客户端配置
     num_clients = 10
     local_epochs = 5
-    batch_size = 64
+    batch_size = 32
     
     # 训练配置
-    learning_rate = 0.001
-    num_rounds = 150
+    learning_rate = 0.02  # 提高学习率加快收敛
+    num_rounds = 250  # Stage1(100) + Stage2(150)
+    use_class_weights = True  # 处理类别不平衡
+    use_focal_loss = True  # 可选: Focal Loss
     
     # 隐私配置
     epsilon = 1.0
@@ -415,7 +379,6 @@ results/
 ├── experiment_results_GroupB.xlsx    # 组B结果Excel
 ├── experiment_results_GroupC.xlsx    # 组C结果Excel
 ├── experiment_results_GroupD.xlsx    # 组D结果Excel
-├── experiment_results_GroupE.xlsx    # 组E结果Excel
 ├── plots/                            # 可视化图表
 │   ├── australian_fedavg_loss.png   # 训练损失曲线
 │   ├── german_fedprox_accuracy.png  # 准确率曲线
@@ -561,14 +524,13 @@ python main.py --mode experiments --summary
 ```
 
 **实验规模**:
-- 当前可运行: 168个实验 (组A-D)
-- 待FedDeProto实现: 12个实验 (组E)
-- 总计: 180个实验
+- 当前实现: 236个实验 (组A-D)
+- 总计: 236个实验
 
 ### 快速验证（20分钟）
 
 ```bash
-# 只运行组A的关键实验（24个实验）
+# 只运行组A的关键实验（28个实验）
 python main.py --mode experiments --groups A
 ```
 
@@ -589,7 +551,7 @@ python main.py --mode single --method fedavg --dataset australian
 | 数据集 | 样本数 | 特征数 | 正样本 | 负样本 | 来源 |
 |--------|--------|--------|--------|--------|------|
 | Australian | 692 | 15 | 307 | 385 | UCI |
-| German | 1,002 | 21 | 700 | 300 | UCI |
+| German | 1,002 | 21 | 300 | 700 | UCI (标签已修正) |
 | Xinwang | 17,886 | 101 | 4,221 | 13,665 | Lending Club |
 | UCI | 30,000 | 23 | 6,636 | 23,364 | UCI |
 
@@ -600,9 +562,7 @@ python main.py --mode single --method fedavg --dataset australian
    - α = 0.3: 中等异质性
    - α = 1.0: 弱异质性(接近IID)
 
-2. **Label Skew**: 标签分布不均
-3. **Feature Skew**: 特征分布差异
-4. **Quantity Skew**: 样本数量差异
+2. **Quantity Skew**: 样本数量差异
 
 ---
 
@@ -625,13 +585,11 @@ python main.py --mode single --method fedavg --dataset australian
 | 实验规模 | 实验数 | CPU时间 | GPU时间 |
 |----------|--------|---------|---------|
 | 单个实验 | 1 | ~2分钟 | ~1分钟 |
-| 组A | 24 | ~50分钟 | ~25分钟 |
-| 组B | 20 | ~40分钟 | ~20分钟 |
-| 组C | 72 | ~2.5小时 | ~1.2小时 |
-| 组D | 72 | ~2.5小时 | ~1.2小时 |
-| 组E | 12 | (待FedDeProto实现) | - |
-| **A-D合计** | **168** | **~5小时** | **~2.5小时** |
-| **全部** | **180** | **~6小时** | **~3小时** |
+| 组A | 28 | ~55分钟 | ~28分钟 |
+| 组B | 112 | ~4小时 | ~2小时 |
+| 组C | 84 | ~3小时 | ~1.5小时 |
+| 组D | 12 | ~25分钟 | ~12分钟 |
+| **全部合计** | **236** | **~8小时** | **~4小时** |
 
 ---
 
@@ -727,4 +685,23 @@ MIT License
 
 ---
 
-**最后更新**: 2024年12月8日
+**最后更新**: 2024年12月11日
+
+---
+
+## ⚠️ 重要修复说明 (2024-12-11)
+
+### 数据集问题修复
+1. **German数据集**: 标签从{1,2}修正为{0,1}
+2. **UCI数据集**: 清理异常类别值
+3. **类别不平衡处理**: 
+   - 增强class_weights计算
+   - 添加Focal Loss支持
+   - 严重不平衡时自动增强少数类权重
+
+### 训练优化
+1. **学习率**: 从0.01提高到0.02，加快收敛
+2. **训练轮次**: 统一为250轮（Stage1: 100, Stage2: 150）
+3. **FedDeProto负数Loss**: 已修复，只取Stage2分类loss
+
+详见 [FIXES_SUMMARY.md](FIXES_SUMMARY.md) 和 [ROOT_CAUSE_ANALYSIS.md](ROOT_CAUSE_ANALYSIS.md)

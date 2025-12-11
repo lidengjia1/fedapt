@@ -1,10 +1,10 @@
-2025-12-11 22:19:09,729 - Experiment - INFO - ======================================================================
-2025-12-11 22:19:09,730 - Experiment - INFO - Running Experiment: FEDDEPROTO on AUSTRALIAN
-2025-12-11 22:19:09,730 - Experiment - INFO - Partition: lda (α=0.1)
-2025-12-11 22:19:09,730 - Experiment - INFO - Clients: 10, LR: 0.01
-2025-12-11 22:19:09,731 - Experiment - INFO - ======================================================================
-2025-12-11 22:19:09,731 - Experiment - INFO - 配置学习率: 0.01 (类型: float)
-2025-12-11 22:19:09,909 - Experiment - INFO - 
+2025-12-11 22:39:51,994 - Experiment - INFO - ======================================================================
+2025-12-11 22:39:51,995 - Experiment - INFO - Running Experiment: FEDDEPROTO on AUSTRALIAN
+2025-12-11 22:39:51,995 - Experiment - INFO - Partition: lda (α=0.1)
+2025-12-11 22:39:51,996 - Experiment - INFO - Clients: 10, LR: 0.01
+2025-12-11 22:39:51,996 - Experiment - INFO - ======================================================================
+2025-12-11 22:39:51,996 - Experiment - INFO - 配置学习率: 0.01 (类型: float)
+2025-12-11 22:39:52,155 - Experiment - INFO - 
 --- Running FedDeProto (Two-Stage Training) ---
-2025-12-11 22:19:09,909 - Experiment - INFO - Stage 1: Federated Feature Distillation
-2025-12-11 22:19:09,926 - Stage1_Distillation - INFO - Stage 1: Federated Feature Distillation
+2025-12-11 22:39:52,155 - Experiment - INFO - Stage 1: Federated Feature Distillation
+2025-12-11 22:39:52,169 - Stage1_Distillation - INFO - Stage 1: Federated Feature Distillation
