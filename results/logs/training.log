@@ -1,10 +1,13 @@
-2025-12-11 22:39:51,994 - Experiment - INFO - ======================================================================
-2025-12-11 22:39:51,995 - Experiment - INFO - Running Experiment: FEDDEPROTO on AUSTRALIAN
-2025-12-11 22:39:51,995 - Experiment - INFO - Partition: lda (α=0.1)
-2025-12-11 22:39:51,996 - Experiment - INFO - Clients: 10, LR: 0.01
-2025-12-11 22:39:51,996 - Experiment - INFO - ======================================================================
-2025-12-11 22:39:51,996 - Experiment - INFO - 配置学习率: 0.01 (类型: float)
-2025-12-11 22:39:52,155 - Experiment - INFO - 
+2025-12-11 23:37:35,236 - Experiment - INFO - ======================================================================
+2025-12-11 23:37:35,237 - Experiment - INFO - Running Experiment: FEDDEPROTO on AUSTRALIAN
+2025-12-11 23:37:35,237 - Experiment - INFO - Partition: lda (α=0.1)
+2025-12-11 23:37:35,238 - Experiment - INFO - Clients: 10, LR: 0.01
+2025-12-11 23:37:35,239 - Experiment - INFO - ======================================================================
+2025-12-11 23:37:35,239 - Experiment - INFO - 配置学习率: 0.01 (类型: float)
+2025-12-11 23:37:35,423 - Experiment - INFO - 
 --- Running FedDeProto (Two-Stage Training) ---
-2025-12-11 22:39:52,155 - Experiment - INFO - Stage 1: Federated Feature Distillation
-2025-12-11 22:39:52,169 - Stage1_Distillation - INFO - Stage 1: Federated Feature Distillation
+2025-12-11 23:37:35,424 - Experiment - INFO - Stage 1: Federated Feature Distillation
+2025-12-11 23:37:35,440 - Stage1_Distillation - INFO - Stage 1: Federated Feature Distillation
+2025-12-11 23:39:12,661 - Experiment - INFO - Stage 1 完成. 生成 550 个共享特征
+2025-12-11 23:39:12,661 - Experiment - INFO - Stage 2: Federated Classification
+2025-12-11 23:39:12,663 - Stage2_Classification - INFO - Stage 2: Federated Classification with Shared Dataset

@@ -19,14 +19,16 @@ class DataPartitioner:
         self.random_state = random_state
         np.random.seed(random_state)
     
-    def partition_lda(self, y, alpha=0.1, X=None):
+    def partition_lda(self, y, alpha=0.1, X=None, min_samples_per_class=5):
         """
         使用 Latent Dirichlet Allocation (LDA) 划分数据
+        **✅ 确保每个客户端都包含所有类别的数据，仅比例不同**
         
         Args:
             y: 标签向量 (n_samples,)
             alpha: Dirichlet 分布参数，越小越不均衡
             X: 特征矩阵 (可选，为了兼容性保留)
+            min_samples_per_class: 每个客户端每个类别的最小样本数（默认5）
         
         Returns:
             list: 客户端索引列表 [[idx1, idx2, ...], [idx3, idx4, ...], ...]
@@ -51,22 +53,38 @@ class DataPartitioner:
             client_indices = []
             class_dist = client_class_distributions[client_id]
             
-            # 根据类别分布分配样本
+            # ✅ 步骤1: 先确保每个类别都有最小样本数
             for class_label in range(num_classes):
-                n_samples_for_class = int(samples_per_client * class_dist[class_label])
                 available_indices = class_indices[class_label]
-                
-                if len(available_indices) >= n_samples_for_class:
+                if len(available_indices) >= min_samples_per_class:
                     selected_indices = np.random.choice(
                         available_indices, 
-                        size=n_samples_for_class, 
+                        size=min_samples_per_class, 
                         replace=False
                     )
                     client_indices.extend(selected_indices)
                     # 移除已分配的索引
                     class_indices[class_label] = [idx for idx in available_indices if idx not in selected_indices]
             
-            # 如果样本不足，从剩余样本中随机补充
+            # ✅ 步骤2: 根据Dirichlet分布分配剩余样本
+            remaining_samples = samples_per_client - len(client_indices)
+            if remaining_samples > 0:
+                for class_label in range(num_classes):
+                    n_samples_for_class = int(remaining_samples * class_dist[class_label])
+                    available_indices = class_indices[class_label]
+                    
+                    if len(available_indices) > 0 and n_samples_for_class > 0:
+                        actual_samples = min(n_samples_for_class, len(available_indices))
+                        selected_indices = np.random.choice(
+                            available_indices, 
+                            size=actual_samples, 
+                            replace=False
+                        )
+                        client_indices.extend(selected_indices)
+                        # 移除已分配的索引
+                        class_indices[class_label] = [idx for idx in available_indices if idx not in selected_indices]
+            
+            # ✅ 步骤3: 如果样本不足，从剩余样本中随机补充
             if len(client_indices) < samples_per_client:
                 remaining_indices = [idx for indices in class_indices.values() for idx in indices]
                 if len(remaining_indices) > 0:

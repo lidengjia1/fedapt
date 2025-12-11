@@ -37,7 +37,6 @@ class ExperimentManager:
         # 实验组定义
         self.experiment_groups = {
             'A': self._define_group_A,
-            'B': self._define_group_B,
             'C': self._define_group_C,
             'D': self._define_group_D
         }
@@ -74,47 +73,6 @@ class ExperimentManager:
                     'description': '基础性能对比'
                 }
                 experiments.append(exp)
-        return experiments
-    
-    def _define_group_B(self):
-        """
-        实验组B: 数据划分方式影响
-        固定: 10客户端, lr=0.01, ε=1.0, 7方法
-        变量: 4数据集 × (3LDA_α + 1QuantitySkew) × 7方法 = 112个实验
-        """
-        experiments = []
-        for dataset in self.datasets:
-            # LDA with different alpha
-            for alpha in self.alphas:
-                for method in self.methods:
-                    exp = {
-                        'group': 'B',
-                        'dataset': dataset,
-                        'partition_type': 'lda',
-                        'alpha': alpha,
-                        'num_clients': 10,
-                        'learning_rate': 0.01,
-                        'epsilon': 1.0,
-                        'method': method,
-                        'description': f'LDA划分 α={alpha}'
-                    }
-                    experiments.append(exp)
-            
-            # Quantity Skew
-            for method in self.methods:
-                exp = {
-                    'group': 'B',
-                    'dataset': dataset,
-                    'partition_type': 'quantity_skew',
-                    'alpha': None,
-                    'num_clients': 10,
-                    'learning_rate': 0.01,
-                    'epsilon': 1.0,
-                    'method': method,
-                    'description': '数量偏斜划分'
-                }
-                experiments.append(exp)
-        
         return experiments
     
     def _define_group_C(self):
@@ -329,22 +287,17 @@ class ExperimentManager:
     def _get_final_loss(self, history, method):
         """
         获取最终loss值
-        对于FedDeProto，只取stage2的最后一个loss（分类loss）
+        对于FedDeProto，train_loss已经只包含stage2的分类loss
         对于其他方法，取train_loss的最后一个值
         """
-        if method == 'feddeproto':
-            # FedDeProto: 只取stage2的loss
-            stage2_rounds = history.get('stage2_rounds', 0)
-            if stage2_rounds > 0:
-                train_loss = history.get('train_loss', [])
-                if len(train_loss) >= stage2_rounds:
-                    # 取最后stage2_rounds个loss的最后一个
-                    stage2_loss = train_loss[-stage2_rounds:]
-                    return stage2_loss[-1] if stage2_loss else 0
+        # 所有方法统一：取train_loss的最后一个值
+        train_loss = history.get('train_loss', [])
+        if not train_loss:
+            return 0.0
         
-        # 其他方法：取最后一个loss
-        train_loss = history.get('train_loss', [0])
-        return train_loss[-1] if train_loss else 0
+        # 确保返回float
+        final_loss = train_loss[-1]
+        return float(final_loss) if final_loss is not None else 0.0
     
     def print_experiment_summary(self):
         """打印实验配置摘要"""

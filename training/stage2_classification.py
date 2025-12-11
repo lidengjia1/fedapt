@@ -184,19 +184,19 @@ class Stage2Classification:
                 logits = client_model(batch_X)
                 loss = criterion(logits, batch_y)
                 
+                # 检查loss是否为NaN（在反向传播前检查）
+                if torch.isnan(loss) or torch.isinf(loss):
+                    print(f"Warning: NaN/Inf loss detected in Stage2, skipping batch...")
+                    continue
+                
                 # 反向传播
                 optimizer.zero_grad()
                 loss.backward()
                 
-                # 梯度裁剪，防止梯度爆炸导致NaN
-                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=1.0)
+                # 更强的梯度裁剪，防止梯度爆炸导致NaN
+                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=0.5)
                 
                 optimizer.step()
-                
-                # 检查loss是否为NaN
-                if torch.isnan(loss) or torch.isinf(loss):
-                    print(f"Warning: NaN/Inf loss detected, skipping batch...")
-                    continue
             
             # 每个epoch后更新学习率
             scheduler.step()

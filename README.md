@@ -128,8 +128,7 @@ python main.py --mode experiments --groups A
 
 | 组别 | 实验数 | 控制变量 | 研究问题 |
 |------|--------|----------|----------|
-| **A** | 28 | 方法对比 | 7种方法在4个数据集上的基础性能 |
-| **B** | 112 | 数据划分 | 4种划分策略(LDA×3+quantity_skew)对7种方法的影响 |
+| **A** | 28 | 方法对比 | 7种方法在4个数据集上的基础性能（每个客户端都包含两类数据，仅比例不同） |
 | **C** | 84 | 客户端数 | 客户端数量(5,8,10)对7种方法的影响 |
 | **D** | 12 | 隐私预算 | 差分隐私对FedDeProto的影响 |
 
@@ -171,40 +170,6 @@ python main.py --mode single --method fedavg --dataset australian
 7. `fedtgp` - FedTGP (时序梯度预测)
 
 **结果文件**: `results/experiment_results_GroupA.xlsx`
-
----
-
-### 实验组B: 数据划分影响 (112个实验)
-
-**目的**: 研究不同数据异质性对所有联邦学习方法的影响
-
-**控制变量**:
-- 客户端数: 10
-- 学习率: 0.02
-- 训练轮次: 250
-
-**命令**:
-
-```bash
-# 运行实验组B所有实验
-python main.py --mode experiments --groups B
-
-# 测试不同LDA参数（所有方法）
-python main.py --mode single --method fedavg --dataset australian --partition-type lda --alpha 0.1
-python main.py --mode single --method fedprox --dataset australian --partition-type lda --alpha 0.3
-python main.py --mode single --method fedkf --dataset australian --partition-type lda --alpha 1.0
-
-# 测试数量偏斜
-python main.py --mode single --method fedavg --dataset german --partition-type quantity_skew
-```
-
-**4种划分策略**:
-1. `lda --alpha 0.1` - 强异质性 (LDA α=0.1)
-2. `lda --alpha 0.3` - 中等异质性 (LDA α=0.3)
-3. `lda --alpha 1.0` - 弱异质性 (LDA α=1.0)
-4. `quantity_skew` - 数量偏斜
-
-**结果文件**: `results/experiment_results_GroupB.xlsx`
 
 ---
 
@@ -285,17 +250,17 @@ python main.py --mode single --method feddeproto --dataset xinwang --epsilon 2.0
 ### 运行多个实验组
 
 ```bash
-# 运行组A和组B (共140个实验)
-python main.py --mode experiments --groups A,B
+# 运行组A和组C (共112个实验)
+python main.py --mode experiments --groups A,C
 
-# 运行所有实验组 (共236个实验，需要数小时)
-python main.py --mode experiments --groups A,B,C,D
-python main.py --mode experiments --groups A,B,C,D,E
+# 运行所有实验组 (共124个实验，约2-3小时)
+python main.py --mode experiments --groups A,C,D
 
 # 查看实验进度和结果摘要
 python main.py --mode experiments --summary
 ```
-- 当前共236个实验（组A: 28 + 组B: 112 + 组C: 84 + 组D: 12）
+- 当前共124个实验（组A: 28 + 组C: 84 + 组D: 12）
+- **重要**: 所有实验确保每个客户端都包含两个类别的数据，仅比例不同，避免单类别导致的训练不稳定
 
 ---
 
@@ -513,8 +478,8 @@ results/
 ### 完整复现论文实验
 
 ```bash
-# 步骤1: 运行所有可用对照实验 (约4-5小时)
-python main.py --mode experiments --groups A,B,C,D
+# 步骤1: 运行所有对照实验 (约2-3小时)
+python main.py --mode experiments --groups A,C,D
 
 # 步骤2: 查看结果摘要
 python main.py --mode experiments --summary
@@ -524,8 +489,9 @@ python main.py --mode experiments --summary
 ```
 
 **实验规模**:
-- 当前实现: 236个实验 (组A-D)
-- 总计: 236个实验
+- 当前实现: 124个实验 (组A, C, D)
+- 总计: 124个实验
+- **数据划分策略**: 使用LDA α=0.1，确保每个客户端都包含两个类别（仅比例不同）
 
 ### 快速验证（20分钟）
 
@@ -586,10 +552,9 @@ python main.py --mode single --method fedavg --dataset australian
 |----------|--------|---------|---------|
 | 单个实验 | 1 | ~2分钟 | ~1分钟 |
 | 组A | 28 | ~55分钟 | ~28分钟 |
-| 组B | 112 | ~4小时 | ~2小时 |
 | 组C | 84 | ~3小时 | ~1.5小时 |
 | 组D | 12 | ~25分钟 | ~12分钟 |
-| **全部合计** | **236** | **~8小时** | **~4小时** |
+| **全部合计** | **124** | **~4小时** | **~2小时** |
 
 ---
 

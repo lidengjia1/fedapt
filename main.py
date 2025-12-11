@@ -10,6 +10,7 @@ from pathlib import Path
 from experiments.run_single_dataset import run_single_experiment
 from experiments.run_all_experiments import ExperimentRunner
 from utils.setup_utils import initialize_experiment_environment, print_experiment_info
+from utils.results_logger import ExperimentLogger
 
 
 def main():
@@ -111,9 +112,47 @@ def main():
             partition_type=args.partition_type
         )
         
+        # 创建logger并保存结果到Excel
+        logger = ExperimentLogger('results/single_experiment_result.xlsx')
+        
+        # 创建结果记录
+        training_info = {
+            'total_rounds': len(history.get('test_accuracy', [])),
+            'convergence_round': len(history.get('test_accuracy', [])),
+            'training_time': 0,  # 单个实验未记录时间
+            'avg_round_time': 0,
+            'final_loss': float(history.get('train_loss', [0])[-1]) if history.get('train_loss') else 0.0,
+            'gpu_used': 'Yes' if torch.cuda.is_available() else 'No'
+        }
+        
+        # 如果是FedDeProto，添加额外信息
+        if args.method == 'feddeproto':
+            training_info.update({
+                'stage1_rounds': history.get('stage1_rounds', 100),
+                'stage2_rounds': history.get('stage2_rounds', 150),
+                'stopped_clients': history.get('stopped_clients', 0)
+            })
+        
+        result = logger.create_result_dict(
+            dataset=args.dataset,
+            partition_type=args.partition_type,
+            alpha=args.alpha if args.partition_type == 'lda' else None,
+            num_clients=args.num_clients,
+            learning_rate=float(args.learning_rate),
+            epsilon=args.epsilon,
+            method=args.method,
+            metrics=metrics,
+            training_info=training_info,
+            notes='Single experiment test'
+        )
+        
+        logger.log_result('Single', result)
+        logger.save_to_excel()
+        
         print("\n" + "="*70)
         print("Experiment Completed!")
         print(f"Final Accuracy: {metrics['accuracy']:.4f}")
+        print(f"Results saved to: {logger.excel_path}")
         print("="*70)
         
     elif args.mode == 'full':

@@ -205,6 +205,7 @@ class Stage1Distillation:
         epoch_losses = []
         
         # 计算类别权重（处理二分类不平衡）
+        has_single_class = False  # 标记是否只有一个类别
         if hasattr(self.config, 'use_class_weights') and self.config.use_class_weights:
             # 从dataloader中提取所有标签
             all_labels = []
@@ -221,8 +222,10 @@ class Stage1Distillation:
                                                    for count in class_counts]).to(self.device)
                 criterion_ce = nn.CrossEntropyLoss(weight=class_weights)
             else:
-                # 只有一个类别时，不使用权重
+                # 只有一个类别时，标记并跳过分类损失
+                has_single_class = True
                 criterion_ce = nn.CrossEntropyLoss()
+                print(f"  Client {client_id}: Single class detected ({unique_classes[0]}), will skip CE loss")
         else:
             criterion_ce = nn.CrossEntropyLoss()
         
@@ -238,11 +241,28 @@ class Stage1Distillation:
                 # 1. VAE重建损失 (MSE)
                 recon_loss = F.mse_loss(x_recon, batch_X)
                 
-                # 2. KL散度损失
-                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / batch_X.size(0)
+                # 检查recon_loss是否有效
+                if torch.isnan(recon_loss) or torch.isinf(recon_loss):
+                    print(f"Warning: NaN/Inf in recon_loss, skipping batch...")
+                    continue
                 
-                # 3. 分类损失
-                ce_loss = criterion_ce(logits, batch_y)
+                # 2. KL散度损失（添加数值稳定性）
+                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / batch_X.size(0)
+                # Clamp KL loss to prevent extreme values
+                kl_loss = torch.clamp(kl_loss, min=-100, max=100)
+                
+                if torch.isnan(kl_loss) or torch.isinf(kl_loss):
+                    print(f"Warning: NaN/Inf in kl_loss, skipping batch...")
+                    continue
+                
+                # 3. 分类损失（单类别客户端跳过）
+                if has_single_class:
+                    ce_loss = torch.tensor(0.0, device=self.device)  # 单类别时设为0
+                else:
+                    ce_loss = criterion_ce(logits, batch_y)
+                    if torch.isnan(ce_loss) or torch.isinf(ce_loss):
+                        print(f"Warning: NaN/Inf in ce_loss, skipping batch...")
+                        continue
                 
                 # 4. 判别器损失（WGAN-GP）
                 # 真实样本通过判别器
@@ -253,6 +273,12 @@ class Stage1Distillation:
                 gp = client_model.compute_gradient_penalty(batch_X, x_recon.detach(), self.device)
                 # WGAN损失
                 wgan_loss = d_fake - d_real + self.config.wgan_lambda_gp * gp
+                # Clamp WGAN loss
+                wgan_loss = torch.clamp(wgan_loss, min=-100, max=100)
+                
+                if torch.isnan(wgan_loss) or torch.isinf(wgan_loss):
+                    print(f"Warning: NaN/Inf in wgan_loss, skipping batch...")
+                    continue
                 
                 # 总损失
                 total_loss = (self.config.lambda_vae * recon_loss + 
@@ -260,19 +286,19 @@ class Stage1Distillation:
                              self.config.lambda_ce * ce_loss +
                              self.config.lambda_wgan * wgan_loss)
                 
+                # 最终检查
+                if torch.isnan(total_loss) or torch.isinf(total_loss):
+                    print(f"Warning: NaN/Inf in total_loss, skipping batch...")
+                    continue
+                
                 # 反向传播
                 optimizer.zero_grad()
                 total_loss.backward()
                 
-                # 梯度裁剪，防止梯度爆炸导致NaN
-                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=1.0)
+                # 更强的梯度裁剪，防止梯度爆炸导致NaN
+                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=0.5)
                 
                 optimizer.step()
-                
-                # 检查loss是否为NaN
-                if torch.isnan(total_loss) or torch.isinf(total_loss):
-                    print(f"Warning: NaN/Inf loss detected, skipping batch...")
-                    continue
                 
                 epoch_loss += total_loss.item()
             
@@ -372,4 +398,5 @@ class Stage1Distillation:
         self.shared_features = np.vstack(self.shared_features)
         self.shared_labels = np.concatenate(self.shared_labels)
         
-        print(f"Shared dataset generated: {self.shared_features.shape[0]} samples")
+        print(f"Shared dataset generated: {self.shared_features.shape[0]} samples, "
+              f"feature dimension: {self.shared_features.shape[1]} (X_s residual features)")
