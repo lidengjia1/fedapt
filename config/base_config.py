@@ -31,6 +31,7 @@ class BaseConfig:
         self.learning_rate = self.LEARNING_RATE
         self.weight_decay = self.WEIGHT_DECAY
         self.local_epochs = self.STAGE1_LOCAL_EPOCHS  # 默认使用第一阶段的值
+        self.use_class_weights = self.USE_CLASS_WEIGHTS  # 类别权重
         
         # 损失函数权重
         self.lambda_vae = self.LAMBDA_VAE
@@ -47,14 +48,24 @@ class BaseConfig:
         self.noise_type = self.NOISE_TYPE
         self.delta = self.DELTA
         
+        # FedDeProto特定参数
+        self.latent_dim = 32  # VAE潜在空间维度
+        self.num_rounds_stage1 = self.STAGE1_ROUNDS  # 别名，方便访问
+        self.num_rounds_stage2 = self.STAGE2_ROUNDS  # 别名，方便访问
+        self.num_classes = 2  # 二分类
+        self.aggregation_strategy = 'fedavg'  # 聚合策略
+        
         # 阈值配置
         self.accuracy_threshold = self.THRESHOLD_ACC_VARIANCE
         self.similarity_threshold = self.THRESHOLD_COSINE_SIM
         self.stability_rounds = self.THRESHOLD_ACC_WINDOW
+        self.acc_fluctuation_threshold = 0.02  # 准确率波动阈值 2%
+        self.cosine_sim_threshold = 0.15  # 余弦相似度阈值
+        self.stable_rounds = 3  # 需要连续稳定的轮数
         self.adaptive_decay_lambda = self.ADAPTIVE_DECAY_LAMBDA
         
         # FedProx配置
-        self.fedprox_mu = 0.01
+        self.fedprox_mu = 0.1  # 近端项系数（增大到0.1使效果更明显）
         
         # 设备配置
         self.device = self.DEVICE
@@ -81,19 +92,20 @@ class BaseConfig:
     ALPHA_VALUES = [0.1, 0.3, 1.0]  # LDA的Dirichlet参数（控制异构程度）
     
     # 第一阶段：特征蒸馏
-    STAGE1_ROUNDS = 50  # 蒸馏阶段的最大通信轮次
+    STAGE1_ROUNDS = 100  # 蒸馏阶段的最大通信轮次（增加到100确保收敛）
     STAGE1_LOCAL_EPOCHS = 5  # 每轮本地训练的epoch数
     STAGE1_CLIENT_FRACTION = 1.0  # 每轮参与训练的客户端比例
     
     # 第二阶段：联邦分类
-    STAGE2_ROUNDS = 100  # 分类阶段的最大通信轮次
+    STAGE2_ROUNDS = 150  # 分类阶段的最大通信轮次（增加到150确保收敛）
     STAGE2_LOCAL_EPOCHS = 5
     STAGE2_CLIENT_FRACTION = 1.0
     
     # ==================== 训练超参数 ====================
     BATCH_SIZE = 32
-    LEARNING_RATE = 0.001
+    LEARNING_RATE = 0.005  # 降低到0.005，避免对多数类过拟合
     WEIGHT_DECAY = 1e-4
+    USE_CLASS_WEIGHTS = True  # 使用类别权重处理不平衡
     
     # 损失函数权重
     LAMBDA_VAE = 1.0      # l1: VAE重建损失

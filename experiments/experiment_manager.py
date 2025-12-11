@@ -290,7 +290,7 @@ class ExperimentManager:
             alpha=exp_config.get('alpha', 0.1),
             method=exp_config['method'],
             num_clients=exp_config['num_clients'],
-            learning_rate=exp_config['learning_rate'],
+            learning_rate=float(exp_config['learning_rate']),
             partition_type=exp_config['partition_type']
         )
         
@@ -320,7 +320,7 @@ class ExperimentManager:
             partition_type=exp_config['partition_type'],
             alpha=exp_config.get('alpha'),
             num_clients=exp_config['num_clients'],
-            learning_rate=exp_config['learning_rate'],
+            learning_rate=float(exp_config['learning_rate']),
             epsilon=exp_config['epsilon'],
             method=exp_config['method'],
             metrics=metrics,

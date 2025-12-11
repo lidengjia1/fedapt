@@ -42,18 +42,21 @@ def evaluate_model(model, test_loader, device='cpu'):
     all_labels = np.array(all_labels)
     all_probs = np.array(all_probs)
     
-    # 计算指标
+    # 计算指标（二分类，pos_label=1, zero_division=0）
     metrics = {
         'accuracy': accuracy_score(all_labels, all_predictions),
-        'precision': precision_score(all_labels, all_predictions, average='binary'),
-        'recall': recall_score(all_labels, all_predictions, average='binary'),
-        'f1_score': f1_score(all_labels, all_predictions, average='binary'),
+        'precision': precision_score(all_labels, all_predictions, average='binary', pos_label=1, zero_division=0),
+        'recall': recall_score(all_labels, all_predictions, average='binary', pos_label=1, zero_division=0),
+        'f1_score': f1_score(all_labels, all_predictions, average='binary', pos_label=1, zero_division=0),
         'confusion_matrix': confusion_matrix(all_labels, all_predictions)
     }
     
     # 计算 AUC (仅对二分类)
     if all_probs.shape[1] == 2:
-        metrics['auc'] = roc_auc_score(all_labels, all_probs[:, 1])
+        try:
+            metrics['auc'] = roc_auc_score(all_labels, all_probs[:, 1])
+        except ValueError:
+            metrics['auc'] = 0.0  # 如果只有一个类别，AUC无法计算
     
     return metrics
 

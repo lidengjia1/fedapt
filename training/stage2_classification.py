@@ -36,7 +36,7 @@ class Stage2Classification:
         
         # 初始化全局分类器
         self.global_classifier = create_classifier(
-            dataset_name=config.dataset_name,
+            classifier_type='mlp',  # 使用MLP分类器
             input_dim=config.input_dim,
             num_classes=config.num_classes
         )
@@ -63,8 +63,7 @@ class Stage2Classification:
         # 训练历史
         self.train_history = {
             'train_loss': [],
-            'train_acc': [],
-            'test_acc': []
+            'test_accuracy': []
         }
     
     def train(self):
@@ -94,6 +93,7 @@ class Stage2Classification:
             
             # 评估
             test_acc = self._evaluate(round_idx)
+            self.train_history['test_accuracy'].append(test_acc)
             pbar.set_postfix({'Acc': f'{test_acc:.4f}'})
             
             # 保存最佳模型
@@ -143,8 +143,31 @@ class Stage2Classification:
             client_model.parameters(),
             lr=self.config.learning_rate
         )
+        # 添加学习率调度器，帮助收敛
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.config.local_epochs,
+            eta_min=self.config.learning_rate * 0.01
+        )
         
-        criterion = nn.CrossEntropyLoss()
+        # 计算类别权重（处理二分类不平衡）
+        if hasattr(self.config, 'use_class_weights') and self.config.use_class_weights:
+            # 合并本地数据和共享数据的标签
+            all_labels = np.concatenate([y_local, self.shared_labels])
+            
+            # 确保有两个类别，否则禁用类别权重
+            unique_classes = np.unique(all_labels)
+            if len(unique_classes) == 2:
+                class_counts = np.bincount(all_labels.astype(int))
+                total_samples = len(all_labels)
+                class_weights = torch.FloatTensor([total_samples / (len(class_counts) * count) 
+                                                   for count in class_counts]).to(self.device)
+                criterion = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                # 只有一个类别时，不使用权重
+                criterion = nn.CrossEntropyLoss()
+        else:
+            criterion = nn.CrossEntropyLoss()
         
         # 本地训练
         for epoch in range(self.config.local_epochs):
@@ -158,7 +181,19 @@ class Stage2Classification:
                 # 反向传播
                 optimizer.zero_grad()
                 loss.backward()
+                
+                # 梯度裁剪，防止梯度爆炸导致NaN
+                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=1.0)
+                
                 optimizer.step()
+                
+                # 检查loss是否为NaN
+                if torch.isnan(loss) or torch.isinf(loss):
+                    print(f"Warning: NaN/Inf loss detected, skipping batch...")
+                    continue
+            
+            # 每个epoch后更新学习率
+            scheduler.step()
         
         client_weight = len(X_local)
         return client_model, client_weight
@@ -187,7 +222,7 @@ class Stage2Classification:
                 total += batch_y.size(0)
         
         test_acc = correct / total
-        self.train_history['test_acc'].append(test_acc)
+        self.train_history['test_accuracy'].append(test_acc)
         
         print(f"Test Accuracy: {test_acc:.4f}")
         return test_acc

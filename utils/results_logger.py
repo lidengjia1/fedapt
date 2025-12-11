@@ -95,7 +95,7 @@ class ExperimentLogger:
             'Partition_Type': partition_type,
             'Alpha': alpha if partition_type == 'lda' else '-',
             'Num_Clients': num_clients,
-            'Learning_Rate': learning_rate,
+            'Learning_Rate': float(learning_rate) if learning_rate is not None else 0.001,
             'Epsilon': epsilon if method == 'feddeproto' else '-',
             'Method': method,
             
@@ -103,7 +103,7 @@ class ExperimentLogger:
             'Accuracy': metrics.get('accuracy', 0),
             'Precision': metrics.get('precision', 0),
             'Recall': metrics.get('recall', 0),
-            'F1_Score': metrics.get('f1', 0),
+            'F1_Score': metrics.get('f1_score', metrics.get('f1', 0)),  # 兼容两种key
             'AUC': metrics.get('auc', 0),
             
             # 训练信息

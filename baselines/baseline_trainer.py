@@ -3,6 +3,7 @@
 """
 import torch
 import torch.nn as nn
+import numpy as np
 import copy
 import logging
 from tqdm import tqdm
@@ -37,8 +38,8 @@ class BaselineTrainer:
         self.logger = logging.getLogger(f'{self.method.upper()}_Trainer')
         
         self.history = {
-            'loss': [],
-            'accuracy': []
+            'train_loss': [],
+            'test_accuracy': []
         }
     
     def _init_aggregator(self):
@@ -84,7 +85,34 @@ class BaselineTrainer:
             local_model.parameters(),
             lr=self.config.learning_rate
         )
-        criterion = nn.CrossEntropyLoss()
+        # 添加学习率调度器，帮助收敛
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, 
+            T_max=self.config.local_epochs,
+            eta_min=self.config.learning_rate * 0.01
+        )
+        
+        # 计算类别权重（处理二分类不平衡）
+        if hasattr(self.config, 'use_class_weights') and self.config.use_class_weights:
+            # 从dataloader中提取所有标签
+            all_labels = []
+            for _, batch_y in self.client_loaders[client_id]:
+                all_labels.extend(batch_y.numpy())
+            all_labels = np.array(all_labels)
+            
+            # 确保有两个类别，否则禁用类别权重
+            unique_classes = np.unique(all_labels)
+            if len(unique_classes) == 2:
+                class_counts = np.bincount(all_labels)
+                total_samples = len(all_labels)
+                class_weights = torch.FloatTensor([total_samples / (len(class_counts) * count) 
+                                                   for count in class_counts]).to(self.device)
+                criterion = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                # 只有一个类别时，不使用权重
+                criterion = nn.CrossEntropyLoss()
+        else:
+            criterion = nn.CrossEntropyLoss()
         
         total_loss = 0
         num_batches = 0
@@ -106,14 +134,23 @@ class BaselineTrainer:
                 # FedProx: 添加近端项 μ/2 * ||w - w_global||^2
                 if self.method == 'fedprox':
                     proximal_term = 0.0
-                    mu = 0.01  # 近端系数
+                    mu = self.config.fedprox_mu  # 从配置读取近端系数
                     for name, param in local_model.named_parameters():
                         if name in global_params:
                             proximal_term += ((param - global_params[name]) ** 2).sum()
                     loss += (mu / 2) * proximal_term
                 
                 loss.backward()
+                
+                # 梯度裁剪，防止梯度爆炸导致NaN
+                torch.nn.utils.clip_grad_norm_(local_model.parameters(), max_norm=1.0)
+                
                 optimizer.step()
+                
+                # 检查loss是否为NaN
+                if torch.isnan(loss) or torch.isinf(loss):
+                    print(f"Warning: NaN/Inf loss detected in batch, skipping...")
+                    continue
                 
                 total_loss += loss.item()
                 num_batches += 1
@@ -126,6 +163,9 @@ class BaselineTrainer:
                             features = local_model.get_features(batch_X)
                             features_list.append(features.cpu())
                             labels_list.append(batch_y.cpu())
+            
+            # 每个epoch后更新学习率
+            scheduler.step()
         
         # FedDr+: 计算类原型
         if self.method == 'feddr+' and features_list:
@@ -241,8 +281,8 @@ class BaselineTrainer:
             test_accuracy = self.evaluate()
             avg_loss = sum(r['loss'] for r in client_results) / len(client_results)
             
-            self.history['loss'].append(avg_loss)
-            self.history['accuracy'].append(test_accuracy)
+            self.history['train_loss'].append(avg_loss)
+            self.history['test_accuracy'].append(test_accuracy)
             
             # 更新进度条
             pbar.set_postfix({
@@ -255,6 +295,6 @@ class BaselineTrainer:
                            f"Loss: {avg_loss:.4f}, Accuracy: {test_accuracy:.4f}")
         
         self.logger.info(f"{self.method.upper()} Training Completed!")
-        self.logger.info(f"Final Test Accuracy: {self.history['accuracy'][-1]:.4f}")
+        self.logger.info(f"Final Test Accuracy: {self.history['test_accuracy'][-1]:.4f}")
         
         return self.history

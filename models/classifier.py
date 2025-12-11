@@ -34,9 +34,17 @@ class MLPClassifier(nn.Module):
         layers.append(nn.Linear(prev_dim, num_classes))
         
         self.network = nn.Sequential(*layers)
+        
+        # 保存隐藏层作为特征提取器
+        self.feature_extractor = nn.Sequential(*layers[:-1])  # 除最后一层
+        self.classifier_layer = layers[-1]  # 最后的分类层
     
     def forward(self, x):
         return self.network(x)
+    
+    def get_features(self, x):
+        """提取中间特征（用于FedFA, FedDr+等方法）"""
+        return self.feature_extractor(x)
 
 
 class ResidualClassifier(nn.Module):
@@ -63,6 +71,13 @@ class ResidualClassifier(nn.Module):
         x = self.dropout(x)
         logits = self.fc3(x)
         return logits
+    
+    def get_features(self, x_residual):
+        """提取中间特征（用于FedFA, FedDr+等方法）"""
+        x = F.relu(self.bn1(self.fc1(x_residual)))
+        x = self.dropout(x)
+        x = F.relu(self.bn2(self.fc2(x)))
+        return x
 
 
 def create_classifier(classifier_type, input_dim, hidden_dims=None, num_classes=2):

@@ -74,8 +74,9 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     setup_logging()
     logger = logging.getLogger('Experiment')
     
-    # 确保随机种子已设置（如果从main.py调用则已设置，否则这里设置）
-    set_random_seed(42)
+    # 注意：随机种子在main.py中已经设置，这里不再重复设置
+    # 避免每个实验都重置随机状态，这样不同方法才能有不同的随机性
+    # set_random_seed(42)  # 已注释：会导致所有实验使用相同随机状态
     
     logger.info("="*70)
     logger.info(f"Running Experiment: {method.upper()} on {dataset_name.upper()}")
@@ -218,18 +219,17 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
             clients_data=clients_data,
             shared_features=shared_features,
             shared_labels=shared_labels,
-            test_data=test_data,
-            classifier_model=model
+            test_data=test_data
         )
         stage2_history = stage2_trainer.train()
         final_model = stage2_trainer.global_classifier
         
         # 合并历史记录
         history = {
-            'loss': stage1_history.get('loss', []) + stage2_history.get('loss', []),
-            'accuracy': stage1_history.get('accuracy', []) + stage2_history.get('accuracy', []),
-            'stage1_rounds': len(stage1_history.get('loss', [])),
-            'stage2_rounds': len(stage2_history.get('loss', [])),
+            'train_loss': stage1_history.get('train_loss', []) + stage2_history.get('train_loss', []),
+            'test_accuracy': stage1_history.get('test_accuracy', []) + stage2_history.get('test_accuracy', []),
+            'stage1_rounds': len(stage1_history.get('train_loss', [])),
+            'stage2_rounds': len(stage2_history.get('train_loss', [])),
             'stopped_clients': stage1_history.get('stopped_clients', 0)
         }
         
@@ -270,8 +270,8 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
             'auc': float(metrics.get('auc', 0))
         },
         'history': {
-            'loss': [float(x) for x in history.get('loss', [])],
-            'accuracy': [float(x) for x in history.get('accuracy', [])]
+            'loss': [float(x) for x in history.get('train_loss', [])],
+            'accuracy': [float(x) for x in history.get('test_accuracy', [])]
         }
     }
     
@@ -282,10 +282,13 @@ def run_single_experiment(dataset_name='australian', alpha=0.1, method='fedavg',
     print(f"\nResults saved to {result_file}")
     
     # 绘制训练曲线
-    if 'test_accuracy' in history:
+    if 'test_accuracy' in history and 'train_loss' in history:
         plot_path = results_dir / 'plots' / f'{dataset_name}_alpha{alpha}_{method}_training.png'
         plot_training_curves(
-            {'accuracy': history['test_accuracy']},
+            {
+                'loss': history['train_loss'],
+                'accuracy': history['test_accuracy']
+            },
             save_path=plot_path
         )
     

@@ -72,6 +72,9 @@ class FedKFAggregator:
         """
         使用卡尔曼滤波聚合：考虑历史信息和不确定性
         """
+        # 获取设备（使用第一个模型的设备）
+        device = next(client_models[0].parameters()).device
+        
         if client_weights is None:
             client_weights = [1.0 / len(client_models)] * len(client_models)
         else:
@@ -83,8 +86,9 @@ class FedKFAggregator:
         # 第一次：直接平均初始化
         if self.state_mean is None:
             for key in client_models[0].state_dict().keys():
-                params = torch.stack([m.state_dict()[key].float() for m in client_models])
-                global_dict[key] = torch.sum(params * torch.tensor(client_weights).view(-1, *([1]*(params.dim()-1))), dim=0)
+                params = torch.stack([m.state_dict()[key].float().to(device) for m in client_models])
+                weights_tensor = torch.tensor(client_weights, device=device).view(-1, *([1]*(params.dim()-1)))
+                global_dict[key] = torch.sum(params * weights_tensor, dim=0)
             
             global_model = copy.deepcopy(client_models[0])
             global_model.load_state_dict(global_dict)
@@ -98,12 +102,13 @@ class FedKFAggregator:
         # 卡尔曼滤波更新
         for key in client_models[0].state_dict().keys():
             # 预测步骤：状态预测 + 协方差预测
-            pred_mean = self.state_mean[key]
-            pred_cov = self.state_cov[key] + self.process_noise
+            pred_mean = self.state_mean[key].to(device)
+            pred_cov = self.state_cov[key].to(device) + self.process_noise
             
             # 测量：客户端模型参数的加权平均
-            measurements = torch.stack([m.state_dict()[key].float() for m in client_models])
-            measurement = torch.sum(measurements * torch.tensor(client_weights).view(-1, *([1]*(measurements.dim()-1))), dim=0)
+            measurements = torch.stack([m.state_dict()[key].float().to(device) for m in client_models])
+            weights_tensor = torch.tensor(client_weights, device=device).view(-1, *([1]*(measurements.dim()-1)))
+            measurement = torch.sum(measurements * weights_tensor, dim=0)
             
             # 卡尔曼增益：K = P_pred / (P_pred + R)
             kalman_gain = pred_cov / (pred_cov + self.measurement_noise)
@@ -132,28 +137,52 @@ class FedFAAggregator:
     
     def aggregate(self, client_models, client_weights=None, client_features=None):
         """
-        FedFA聚合：先标准聚合，再对齐特征分布
+        FedFA聚合：根据特征对齐程度调整聚合权重
         
         Args:
             client_features: 客户端特征 [(features, labels), ...]
         """
-        # 基础聚合
-        global_model = FedAvgAggregator.aggregate(client_models, client_weights)
+        if client_weights is None:
+            client_weights = [1.0 / len(client_models)] * len(client_models)
+        else:
+            total_weight = sum(client_weights)
+            client_weights = [w / total_weight for w in client_weights]
         
-        # 如果有特征信息，进行特征对齐
+        # 如果有特征信息，根据特征相似度调整权重
         if client_features is not None and len(client_features) > 0:
-            # 计算全局特征统计（均值和方差）
-            all_features = []
-            for features in client_features:
-                if features is not None:
-                    all_features.append(features)
+            valid_features = [f for f in client_features if f is not None]
             
-            if len(all_features) > 0:
-                # 简化实现：记录特征统计用于下一轮
-                self.global_feature_stats = {
-                    'mean': torch.cat(all_features).mean(dim=0) if len(all_features) > 0 else None,
-                    'std': torch.cat(all_features).std(dim=0) if len(all_features) > 0 else None
-                }
+            if len(valid_features) > 1:
+                # 计算特征中心
+                feature_center = torch.cat(valid_features).mean(dim=0)
+                
+                # 计算每个客户端与中心的相似度
+                similarities = []
+                for features in client_features:
+                    if features is not None:
+                        # 余弦相似度
+                        feat_mean = features.mean(dim=0)
+                        sim = torch.nn.functional.cosine_similarity(
+                            feat_mean.unsqueeze(0), 
+                            feature_center.unsqueeze(0)
+                        ).item()
+                        similarities.append(sim)
+                    else:
+                        similarities.append(0.5)  # 默认相似度
+                
+                # 根据相似度调整权重：相似度高的客户端获得更高权重
+                adjusted_weights = []
+                for w, sim in zip(client_weights, similarities):
+                    # 权重调整：w' = w * (1 + α * sim)
+                    adjusted_w = w * (1.0 + self.alignment_weight * sim)
+                    adjusted_weights.append(adjusted_w)
+                
+                # 重新归一化
+                total_w = sum(adjusted_weights)
+                client_weights = [w / total_w for w in adjusted_weights]
+        
+        # 使用调整后的权重进行聚合
+        global_model = FedAvgAggregator.aggregate(client_models, client_weights)
         
         return global_model
 
@@ -173,43 +202,78 @@ class FedDrPlusAggregator:
     
     def aggregate(self, client_models, client_weights=None, client_prototypes=None):
         """
-        FedDr+聚合：聚合模型 + 聚合原型
+        FedDr+聚合：根据原型质量调整模型聚合权重
         
         Args:
             client_prototypes: 客户端原型 [{'class_0': proto0, 'class_1': proto1}, ...]
         """
-        # 1. 标准模型聚合
-        global_model = FedAvgAggregator.aggregate(client_models, client_weights)
+        if client_weights is None:
+            client_weights = [1.0 / len(client_models)] * len(client_models)
+        else:
+            total_weight = sum(client_weights)
+            client_weights = [w / total_weight for w in client_weights]
         
-        # 2. 原型聚合
+        # 1. 原型聚合和质量评估
         if client_prototypes is not None and len(client_prototypes) > 0:
+            # 计算全局原型（用于评估客户端原型质量）
+            global_protos = {}
+            for class_id in range(self.num_classes):
+                class_protos = []
+                for proto_dict in client_prototypes:
+                    if proto_dict and f'class_{class_id}' in proto_dict:
+                        class_protos.append(proto_dict[f'class_{class_id}'])
+                
+                if len(class_protos) > 0:
+                    global_protos[f'class_{class_id}'] = torch.stack(class_protos).mean(dim=0)
+            
+            # 根据原型质量调整权重（使用当前轮的全局原型作为参考）
+            if len(global_protos) > 0:
+                # 使用当前计算的全局原型或历史全局原型作为参考
+                reference_protos = self.global_prototypes if self.global_prototypes is not None else global_protos
+                
+                proto_scores = []
+                for proto_dict in client_prototypes:
+                    if proto_dict:
+                        # 计算客户端原型与参考原型的一致性
+                        score = 0.0
+                        count = 0
+                        for class_key in global_protos:
+                            if class_key in proto_dict and class_key in reference_protos:
+                                # 余弦相似度
+                                sim = torch.nn.functional.cosine_similarity(
+                                    proto_dict[class_key].unsqueeze(0),
+                                    reference_protos[class_key].unsqueeze(0)
+                                ).item()
+                                score += sim
+                                count += 1
+                        proto_scores.append(score / count if count > 0 else 0.5)
+                    else:
+                        proto_scores.append(0.5)
+                
+                # 调整权重：原型质量高的客户端获得更高权重
+                adjusted_weights = []
+                for w, score in zip(client_weights, proto_scores):
+                    adjusted_w = w * (1.0 + (1.0 - self.momentum) * score)
+                    adjusted_weights.append(adjusted_w)
+                
+                # 重新归一化
+                total_w = sum(adjusted_weights)
+                client_weights = [w / total_w for w in adjusted_weights]
+            
+            # 更新全局原型
             if self.global_prototypes is None:
-                # 初始化全局原型
-                self.global_prototypes = {}
-                for class_id in range(self.num_classes):
-                    class_protos = []
-                    for proto_dict in client_prototypes:
-                        if proto_dict and f'class_{class_id}' in proto_dict:
-                            class_protos.append(proto_dict[f'class_{class_id}'])
-                    
-                    if len(class_protos) > 0:
-                        self.global_prototypes[f'class_{class_id}'] = torch.stack(class_protos).mean(dim=0)
+                self.global_prototypes = global_protos
             else:
-                # 动量更新全局原型
-                for class_id in range(self.num_classes):
-                    class_protos = []
-                    for proto_dict in client_prototypes:
-                        if proto_dict and f'class_{class_id}' in proto_dict:
-                            class_protos.append(proto_dict[f'class_{class_id}'])
-                    
-                    if len(class_protos) > 0:
-                        new_proto = torch.stack(class_protos).mean(dim=0)
-                        if f'class_{class_id}' in self.global_prototypes:
-                            self.global_prototypes[f'class_{class_id}'] = \
-                                self.momentum * self.global_prototypes[f'class_{class_id}'] + \
-                                (1 - self.momentum) * new_proto
-                        else:
-                            self.global_prototypes[f'class_{class_id}'] = new_proto
+                for class_key in global_protos:
+                    if class_key in self.global_prototypes:
+                        self.global_prototypes[class_key] = \
+                            self.momentum * self.global_prototypes[class_key] + \
+                            (1 - self.momentum) * global_protos[class_key]
+                    else:
+                        self.global_prototypes[class_key] = global_protos[class_key]
+        
+        # 2. 使用调整后的权重进行模型聚合
+        global_model = FedAvgAggregator.aggregate(client_models, client_weights)
         
         return global_model
 

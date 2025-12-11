@@ -1,8 +1,9 @@
 """
-第一阶段：联邦特征蒸馈训练
+第一阶段：联邦特征蒸馏训练
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import copy
@@ -34,11 +35,16 @@ class Stage1Distillation:
         self.num_clients = len(clients_data)
         
         # 初始化全局蒸馏模型
-        self.global_distiller = VAEWGANDistiller(
-            input_dim=config.input_dim,
-            latent_dim=config.latent_dim,
-            num_classes=config.num_classes
-        )
+        distiller_config = {
+            'input_dim': config.input_dim,
+            'latent_dim': config.latent_dim,
+            'num_classes': config.num_classes,
+            'encoder_hidden': [128, 64],
+            'decoder_hidden': [64, 128],
+            'discriminator_hidden': [128, 64],
+            'classifier_hidden': [64, 32]
+        }
+        self.global_distiller = VAEWGANDistiller(distiller_config)
         
         # 初始化服务器
         self.server = FederatedServer(
@@ -74,6 +80,13 @@ class Stage1Distillation:
         # 初始化logger
         self.logger = logging.getLogger('Stage1_Distillation')
     
+        # 训练历史
+        self.train_history = {
+            'train_loss': [],
+            'test_accuracy': [],
+            'stopped_clients': 0
+        }
+        
     def train(self):
         """执行第一阶段训练"""
         self.logger.info("Stage 1: Federated Feature Distillation")
@@ -115,8 +128,13 @@ class Stage1Distillation:
                 client_models, client_weights, client_info
             )
             
+            # 记录平均loss
+            avg_loss = sum(info['avg_loss'] for info in client_info.values()) / len(client_info)
+            self.train_history['train_loss'].append(avg_loss)
+            
             # 评估全局模型
-            self._evaluate_global_model(round_idx)
+            test_acc = self._evaluate_global_model(round_idx)
+            self.train_history['test_accuracy'].append(test_acc)
             
             print(f"Active clients: {len(self.active_clients)}, "
                   f"Stopped clients: {len(self.stopped_clients)}")
@@ -127,7 +145,10 @@ class Stage1Distillation:
         print("="*60)
         self._generate_shared_dataset()
         
-        return self.shared_features, self.shared_labels
+        # 记录停止的客户端数
+        self.train_history['stopped_clients'] = len(self.stopped_clients)
+        
+        return self.train_history
     
     def _select_clients(self, round_idx):
         """选择参与本轮训练的客户端"""
@@ -168,29 +189,95 @@ class Stage1Distillation:
             client_model.parameters(), 
             lr=self.config.learning_rate
         )
+        # 添加学习率调度器，帮助收敛
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.config.local_epochs,
+            eta_min=self.config.learning_rate * 0.01
+        )
         
         # 计算本地原型（使用上一轮的特征提取器）
         prototypes = self.prototype_managers[client_id].compute_prototypes(
-            X_client, y_client, client_model.encoder
+            client_model.encoder, dataloader
         )
         
         # 本地训练
         epoch_losses = []
+        
+        # 计算类别权重（处理二分类不平衡）
+        if hasattr(self.config, 'use_class_weights') and self.config.use_class_weights:
+            # 从dataloader中提取所有标签
+            all_labels = []
+            for _, batch_y in dataloader:
+                all_labels.extend(batch_y.cpu().numpy())
+            all_labels = np.array(all_labels)
+            
+            # 确保有两个类别，否则禁用类别权重
+            unique_classes = np.unique(all_labels)
+            if len(unique_classes) == 2:
+                class_counts = np.bincount(all_labels)
+                total_samples = len(all_labels)
+                class_weights = torch.FloatTensor([total_samples / (len(class_counts) * count) 
+                                                   for count in class_counts]).to(self.device)
+                criterion_ce = nn.CrossEntropyLoss(weight=class_weights)
+            else:
+                # 只有一个类别时，不使用权重
+                criterion_ce = nn.CrossEntropyLoss()
+        else:
+            criterion_ce = nn.CrossEntropyLoss()
+        
         for epoch in range(self.config.local_epochs):
             epoch_loss = 0.0
             for batch_X, batch_y in dataloader:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 
-                # 前向传播（包含原型对齐）
-                loss_dict = client_model(batch_X, batch_y, prototypes)
-                total_loss = loss_dict['total_loss']
+                # 前向传播
+                x_recon, x_residual, mu, logvar, z, logits = client_model(batch_X)
+                
+                # 计算各项损失
+                # 1. VAE重建损失 (MSE)
+                recon_loss = F.mse_loss(x_recon, batch_X)
+                
+                # 2. KL散度损失
+                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / batch_X.size(0)
+                
+                # 3. 分类损失
+                ce_loss = criterion_ce(logits, batch_y)
+                
+                # 4. 判别器损失（WGAN-GP）
+                # 真实样本通过判别器
+                d_real = client_model.discriminator(batch_X).mean()
+                # 重建样本通过判别器
+                d_fake = client_model.discriminator(x_recon.detach()).mean()
+                # 梯度惩罚
+                gp = client_model.compute_gradient_penalty(batch_X, x_recon.detach(), self.device)
+                # WGAN损失
+                wgan_loss = d_fake - d_real + self.config.wgan_lambda_gp * gp
+                
+                # 总损失
+                total_loss = (self.config.lambda_vae * recon_loss + 
+                             self.config.lambda_vae * kl_loss +
+                             self.config.lambda_ce * ce_loss +
+                             self.config.lambda_wgan * wgan_loss)
                 
                 # 反向传播
                 optimizer.zero_grad()
                 total_loss.backward()
+                
+                # 梯度裁剪，防止梯度爆炸导致NaN
+                torch.nn.utils.clip_grad_norm_(client_model.parameters(), max_norm=1.0)
+                
                 optimizer.step()
                 
+                # 检查loss是否为NaN
+                if torch.isnan(total_loss) or torch.isinf(total_loss):
+                    print(f"Warning: NaN/Inf loss detected, skipping batch...")
+                    continue
+                
                 epoch_loss += total_loss.item()
+            
+            # 每个epoch后更新学习率
+            scheduler.step()
             
             avg_epoch_loss = epoch_loss / len(dataloader)
             epoch_losses.append(avg_epoch_loss)
@@ -248,6 +335,7 @@ class Stage1Distillation:
             accuracy = (predictions == y_test).float().mean().item()
             
             print(f"Global Model Test Accuracy: {accuracy:.4f}")
+            return accuracy
     
     def _generate_shared_dataset(self):
         """生成全局共享数据集"""

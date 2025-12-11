@@ -61,14 +61,15 @@ def main():
                        help='Random seed for reproducibility (default: 42)')
     
     parser.add_argument('--no-clear', action='store_true',
-                       help='Do not clear results directory before running')
+                       help='⚠️ Do not clear results directory before running (preserve previous results)')
     
     parser.add_argument('--yes', '-y', action='store_true',
                        help='Skip confirmation prompt and run experiments directly')
     
     args = parser.parse_args()
     
-    # 初始化实验环境（设置随机种子 + 清空results目录）
+    # ⚠️ 警告：默认会清空results目录！
+    # 如果要保留之前的结果，请使用 --no-clear 参数
     initialize_experiment_environment(
         seed=args.seed,
         clear_results=not args.no_clear,

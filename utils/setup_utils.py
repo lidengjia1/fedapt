@@ -44,6 +44,8 @@ def clear_results_directory(results_dir='results', keep_structure=True):
     """
     清空results目录下的所有文件，但保留文件夹结构
     
+    ⚠️ 警告：此操作会删除所有实验结果！建议使用--no-clear保留历史数据
+    
     Args:
         results_dir: results目录路径
         keep_structure: 是否保留文件夹结构（默认True）
@@ -56,7 +58,9 @@ def clear_results_directory(results_dir='results', keep_structure=True):
         results_path.mkdir(parents=True, exist_ok=True)
         return
     
+    logger.warning(f"⚠️  WARNING: Clearing results directory will DELETE all experimental data!")
     logger.info(f"🗑️  Clearing results directory: {results_dir}")
+    logger.info(f"    Tip: Use --no-clear to preserve previous results")
     
     deleted_files = 0
     deleted_dirs = 0
