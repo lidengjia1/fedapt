@@ -28,19 +28,18 @@ class ExperimentManager:
         self.methods = ['feddeproto', 'fedavg', 'fedprox', 'fedkf', 'fedfa', 'feddr+', 'fedtgp']
         
         # 参数设置
-        self.learning_rates = [0.001, 0.01, 0.1]
-        self.client_numbers = [5, 8, 10]
+        self.learning_rates = [0.01]  # 统一使用0.01
+        self.client_numbers = [5, 8, 10]  # 修改为5,8,10
         self.alphas = [0.1, 0.3, 1.0]
         self.epsilons = [0.1, 1.0, 10.0]
-        self.partition_types = ['lda', 'label_skew', 'quantity_skew']
+        self.partition_types = ['lda', 'quantity_skew']  # 删除label_skew和feature_skew
         
         # 实验组定义
         self.experiment_groups = {
             'A': self._define_group_A,
             'B': self._define_group_B,
             'C': self._define_group_C,
-            'D': self._define_group_D,
-            'E': self._define_group_E
+            'D': self._define_group_D
         }
         
         print("="*70)
@@ -57,7 +56,7 @@ class ExperimentManager:
     def _define_group_A(self):
         """
         实验组A: 基础性能对比
-        固定: 10客户端, LDA α=0.1, lr=0.001, ε=1.0
+        固定: 10客户端, LDA α=0.1, lr=0.01, ε=1.0
         变量: 4数据集 × 7方法 = 28个实验
         """
         experiments = []
@@ -69,7 +68,7 @@ class ExperimentManager:
                     'partition_type': 'lda',
                     'alpha': 0.1,
                     'num_clients': 10,
-                    'learning_rate': 0.001,
+                    'learning_rate': 0.01,  # 修改为0.01
                     'epsilon': 1.0,
                     'method': method,
                     'description': '基础性能对比'
@@ -80,61 +79,49 @@ class ExperimentManager:
     def _define_group_B(self):
         """
         实验组B: 数据划分方式影响
-        固定: 10客户端, lr=0.001, ε=1.0, FedDeProto
-        变量: 4数据集 × (3LDA_α + 1LabelSkew + 1QuantitySkew) = 20个实验
+        固定: 10客户端, lr=0.01, ε=1.0, 7方法
+        变量: 4数据集 × (3LDA_α + 1QuantitySkew) × 7方法 = 112个实验
         """
         experiments = []
         for dataset in self.datasets:
             # LDA with different alpha
             for alpha in self.alphas:
+                for method in self.methods:
+                    exp = {
+                        'group': 'B',
+                        'dataset': dataset,
+                        'partition_type': 'lda',
+                        'alpha': alpha,
+                        'num_clients': 10,
+                        'learning_rate': 0.01,
+                        'epsilon': 1.0,
+                        'method': method,
+                        'description': f'LDA划分 α={alpha}'
+                    }
+                    experiments.append(exp)
+            
+            # Quantity Skew
+            for method in self.methods:
                 exp = {
                     'group': 'B',
                     'dataset': dataset,
-                    'partition_type': 'lda',
-                    'alpha': alpha,
+                    'partition_type': 'quantity_skew',
+                    'alpha': None,
                     'num_clients': 10,
-                    'learning_rate': 0.001,
+                    'learning_rate': 0.01,
                     'epsilon': 1.0,
-                    'method': 'feddeproto',
-                    'description': f'LDA划分 α={alpha}'
+                    'method': method,
+                    'description': '数量偏斜划分'
                 }
                 experiments.append(exp)
-            
-            # Label Skew
-            exp = {
-                'group': 'B',
-                'dataset': dataset,
-                'partition_type': 'label_skew',
-                'alpha': None,
-                'num_clients': 10,
-                'learning_rate': 0.001,
-                'epsilon': 1.0,
-                'method': 'feddeproto',
-                'description': '标签偏斜划分'
-            }
-            experiments.append(exp)
-            
-            # Quantity Skew
-            exp = {
-                'group': 'B',
-                'dataset': dataset,
-                'partition_type': 'quantity_skew',
-                'alpha': None,
-                'num_clients': 10,
-                'learning_rate': 0.001,
-                'epsilon': 1.0,
-                'method': 'feddeproto',
-                'description': '数量偏斜划分'
-            }
-            experiments.append(exp)
         
         return experiments
     
     def _define_group_C(self):
         """
         实验组C: 客户端数量影响
-        固定: LDA α=0.1, lr=0.001, ε=1.0
-        变量: 4数据集 × 3客户端数 × 7方法 = 84个实验
+        固定: LDA α=0.1, lr=0.01, ε=1.0
+        变量: 4数据集 × 3客户端数(5,8,10) × 7方法 = 84个实验
         """
         experiments = []
         for dataset in self.datasets:
@@ -146,7 +133,7 @@ class ExperimentManager:
                         'partition_type': 'lda',
                         'alpha': 0.1,
                         'num_clients': num_clients,
-                        'learning_rate': 0.001,
+                        'learning_rate': 0.01,
                         'epsilon': 1.0,
                         'method': method,
                         'description': f'{num_clients}个客户端'
@@ -156,32 +143,8 @@ class ExperimentManager:
     
     def _define_group_D(self):
         """
-        实验组D: 学习率影响
-        固定: 10客户端, LDA α=0.1, ε=1.0
-        变量: 4数据集 × 3学习率 × 7方法 = 84个实验
-        """
-        experiments = []
-        for dataset in self.datasets:
-            for lr in self.learning_rates:
-                for method in self.methods:
-                    exp = {
-                        'group': 'D',
-                        'dataset': dataset,
-                        'partition_type': 'lda',
-                        'alpha': 0.1,
-                        'num_clients': 10,
-                        'learning_rate': lr,
-                        'epsilon': 1.0,
-                        'method': method,
-                        'description': f'学习率={lr}'
-                    }
-                    experiments.append(exp)
-        return experiments
-    
-    def _define_group_E(self):
-        """
-        实验组E: 差分隐私影响 (仅FedDeProto)
-        固定: 10客户端, LDA α=0.1, lr=0.001
+        实验组D: 差分隐私影响 (仅FedDeProto)
+        固定: 10客户端, LDA α=0.1, lr=0.01
         变量: 4数据集 × 3ε = 12个实验
         """
         experiments = []
@@ -193,7 +156,7 @@ class ExperimentManager:
                     'partition_type': 'lda',
                     'alpha': 0.1,
                     'num_clients': 10,
-                    'learning_rate': 0.001,
+                    'learning_rate': 0.01,
                     'epsilon': epsilon,
                     'method': 'feddeproto',
                     'description': f'隐私预算ε={epsilon}'
@@ -302,7 +265,7 @@ class ExperimentManager:
             'convergence_round': self._find_convergence_round(history),
             'training_time': training_time,
             'avg_round_time': training_time / max(len(history.get('test_accuracy', [])), 1),
-            'final_loss': history.get('train_loss', [0])[-1] if history.get('train_loss') else 0,
+            'final_loss': self._get_final_loss(history, exp_config['method']),
             'gpu_used': 'Yes' if torch.cuda.is_available() else 'No'
         }
         
@@ -362,6 +325,26 @@ class ExperimentManager:
                           'final_loss': 0, 'gpu_used': 'Error'},
             notes=f'ERROR: {error_msg}'
         )
+    
+    def _get_final_loss(self, history, method):
+        """
+        获取最终loss值
+        对于FedDeProto，只取stage2的最后一个loss（分类loss）
+        对于其他方法，取train_loss的最后一个值
+        """
+        if method == 'feddeproto':
+            # FedDeProto: 只取stage2的loss
+            stage2_rounds = history.get('stage2_rounds', 0)
+            if stage2_rounds > 0:
+                train_loss = history.get('train_loss', [])
+                if len(train_loss) >= stage2_rounds:
+                    # 取最后stage2_rounds个loss的最后一个
+                    stage2_loss = train_loss[-stage2_rounds:]
+                    return stage2_loss[-1] if stage2_loss else 0
+        
+        # 其他方法：取最后一个loss
+        train_loss = history.get('train_loss', [0])
+        return train_loss[-1] if train_loss else 0
     
     def print_experiment_summary(self):
         """打印实验配置摘要"""

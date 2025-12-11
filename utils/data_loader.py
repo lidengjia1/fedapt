@@ -86,9 +86,16 @@ class CreditDataLoader:
         X = df.iloc[:, :-1].values
         y = df.iloc[:, -1].values
         
-        # 确保标签是0和1
-        if y.min() > 0:
+        # 修正标签: German数据集标签为1,2需要转换为0,1
+        unique_labels = np.unique(y)
+        print(f"German数据集原始标签: {unique_labels}")
+        if set(unique_labels) == {1, 2}:
+            print("警告: 检测到标签为{1,2}，转换为{0,1}")
             y = y - 1
+        elif y.min() > 0:
+            print(f"警告: 标签最小值为{y.min()}，调整为从0开始")
+            y = y - y.min()
+        print(f"转换后标签: {np.unique(y)}，分布: {np.bincount(y)}")
         
         # 标准化
         X = scaler.fit_transform(X)
@@ -130,9 +137,33 @@ class CreditDataLoader:
         if 'ID' in df.columns:
             df = df.drop('ID', axis=1)
         
-        # 假设最后一列是标签
-        X = df.iloc[:, :-1].values
-        y = df.iloc[:, -1].values
+        # 找到标签列（通常是Y或target或最后一列）
+        if 'Y' in df.columns:
+            label_col = 'Y'
+        elif 'target' in df.columns:
+            label_col = 'target'
+        else:
+            label_col = df.columns[-1]
+        
+        # 提取特征和标签
+        X = df.drop(label_col, axis=1).values
+        y = df[label_col].values
+        
+        # 清理异常标签值（字符串等）
+        print(f"UCI数据集原始标签类型: {type(y[0])}, 唯一值: {np.unique(y)}")
+        y = pd.to_numeric(y, errors='coerce')  # 将非数字转换为NaN
+        valid_mask = ~np.isnan(y)
+        if not valid_mask.all():
+            print(f"警告: 发现{(~valid_mask).sum()}个异常标签，已移除")
+            X = X[valid_mask]
+            y = y[valid_mask]
+        y = y.astype(int)
+        
+        # 确保标签是0和1
+        if y.min() > 0:
+            print(f"警告: 标签最小值为{y.min()}，调整为从0开始")
+            y = y - y.min()
+        print(f"转换后标签: {np.unique(y)}，分布: {np.bincount(y)}")
         
         # 标准化
         X = scaler.fit_transform(X)

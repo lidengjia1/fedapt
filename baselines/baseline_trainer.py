@@ -12,6 +12,7 @@ from federated.aggregation import (
     FedFAAggregator, FedDrPlusAggregator,
     FedTGPAggregator, FedFedAggregator
 )
+from utils.focal_loss import get_loss_function, compute_enhanced_class_weights
 
 
 class BaselineTrainer:
@@ -92,7 +93,8 @@ class BaselineTrainer:
             eta_min=self.config.learning_rate * 0.01
         )
         
-        # 计算类别权重（处理二分类不平衡）
+        # 计算增强的类别权重（处理二分类不平衡）
+        class_weights = None
         if hasattr(self.config, 'use_class_weights') and self.config.use_class_weights:
             # 从dataloader中提取所有标签
             all_labels = []
@@ -103,16 +105,20 @@ class BaselineTrainer:
             # 确保有两个类别，否则禁用类别权重
             unique_classes = np.unique(all_labels)
             if len(unique_classes) == 2:
-                class_counts = np.bincount(all_labels)
-                total_samples = len(all_labels)
-                class_weights = torch.FloatTensor([total_samples / (len(class_counts) * count) 
-                                                   for count in class_counts]).to(self.device)
-                criterion = nn.CrossEntropyLoss(weight=class_weights)
-            else:
-                # 只有一个类别时，不使用权重
-                criterion = nn.CrossEntropyLoss()
+                # 使用增强的类别权重计算
+                class_weights_np = compute_enhanced_class_weights(all_labels)
+                class_weights = torch.FloatTensor(class_weights_np).to(self.device)
+        
+        # 获取损失函数（可能是Focal Loss或CrossEntropy）
+        use_focal = getattr(self.config, 'use_focal_loss', False)
+        if use_focal:
+            alpha = getattr(self.config, 'focal_alpha', 0.25)
+            gamma = getattr(self.config, 'focal_gamma', 2.0)
+            criterion = get_loss_function('focal', use_focal=True, 
+                                         alpha=alpha, gamma=gamma, 
+                                         class_weights=class_weights)
         else:
-            criterion = nn.CrossEntropyLoss()
+            criterion = nn.CrossEntropyLoss(weight=class_weights)
         
         total_loss = 0
         num_batches = 0

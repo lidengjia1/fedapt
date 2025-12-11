@@ -103,9 +103,12 @@ class BaseConfig:
     
     # ==================== 训练超参数 ====================
     BATCH_SIZE = 32
-    LEARNING_RATE = 0.005  # 降低到0.005，避免对多数类过拟合
+    LEARNING_RATE = 0.02  # 提高到0.02以加快收敛
     WEIGHT_DECAY = 1e-4
     USE_CLASS_WEIGHTS = True  # 使用类别权重处理不平衡
+    USE_FOCAL_LOSS = True  # 使用Focal Loss处理类别不平衡
+    FOCAL_ALPHA = 0.25  # Focal Loss alpha参数
+    FOCAL_GAMMA = 2.0   # Focal Loss gamma参数
     
     # 损失函数权重
     LAMBDA_VAE = 1.0      # l1: VAE重建损失

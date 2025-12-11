@@ -128,10 +128,9 @@ python main.py --mode experiments --groups A
 | 组别 | 实验数 | 控制变量 | 研究问题 |
 |------|--------|----------|----------|
 | **A** | 28 | 方法对比 | 7种方法在4个数据集上的基础性能 |
-| **B** | 20 | 数据划分 | 5种划分策略对FedDeProto的影响 |
-| **C** | 84 | 客户端数 | 客户端数量对7种方法的影响 |
-| **D** | 84 | 学习率 | 学习率对7种方法的影响 |
-| **E** | 12 | 隐私预算 | 差分隐私对FedDeProto的影响 |
+| **B** | 112 | 数据划分 | 4种划分策略(LDA×3+quantity_skew)对7种方法的影响 |
+| **C** | 84 | 客户端数 | 客户端数量(5,8,10)对7种方法的影响 |
+| **D** | 12 | 隐私预算 | 差分隐私对FedDeProto的影响 |
 
 ---
 
@@ -141,9 +140,9 @@ python main.py --mode experiments --groups A
 
 **控制变量**:
 - 客户端数: 10
-- 学习率: 0.001
+- 学习率: 0.01
 - 划分方式: LDA (α=0.1)
-- 训练轮次: 150
+- 训练轮次: 250
 
 **命令**:
 
@@ -202,12 +201,11 @@ python main.py --mode single --method fedavg --dataset german --partition-type l
 python main.py --mode single --method fedavg --dataset xinwang --partition-type feature_skew
 ```
 
-**5种划分策略**:
+**4种划分策略**:
 1. `lda --alpha 0.1` - 强异质性 (LDA α=0.1)
 2. `lda --alpha 0.3` - 中等异质性 (LDA α=0.3)
 3. `lda --alpha 1.0` - 弱异质性 (LDA α=1.0)
-4. `label_skew` - 标签偏斜
-5. `feature_skew` - 特征偏斜
+4. `quantity_skew` - 数量偏斜
 
 **结果文件**: `results/experiment_results_GroupB.xlsx`
 
@@ -240,8 +238,8 @@ python main.py --mode single --method fedprox --dataset xinwang --num-clients 20
 
 **3种客户端配置**:
 - 5个客户端 (小规模)
-- 10个客户端 (中等规模，默认)
-- 20个客户端 (大规模)
+- 8个客户端 (中等规模)
+- 10个客户端 (标准规模，默认)
 
 **实验矩阵**: 3种配置 × 7种方法 × 4个数据集 = 84个实验
 
